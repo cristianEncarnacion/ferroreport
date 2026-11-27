@@ -13,7 +13,7 @@ a report. Or write templates in [its own format](#templates-jrxml-or-ferro), hal
 JRXML and accessible by default. Against JasperReports itself it is about **200× faster from a cold start** and
 **3 to 5× faster than a JVM that is already warm** ([the numbers](#performance)).
 
-<p align="center"><a href="https://cristianencarnacion.github.io/ferroreport/"><img src="docs/race.gif" alt="Race: JasperReports renders 1 invoice in 2.63 s; ferroreport renders 234 in the same time" width="760"></a></p>
+<p align="center"><a href="https://cristianencarnacion.github.io/ferroreport/"><img src="docs/race.gif" alt="Race: JasperReports renders 1 invoice in 2.90 s; ferroreport renders 268 in the same time" width="760"></a></p>
 
 **[Try it in your browser](https://cristianencarnacion.github.io/ferroreport/)** ·
 [Design a report](https://cristianencarnacion.github.io/ferroreport/designer/) ·

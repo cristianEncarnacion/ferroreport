@@ -4,6 +4,9 @@ Usage: python3 tools/promo/film.py http://localhost:8765/index.html out.mp4
 Needs Playwright with Chrome or Chromium, ffmpeg and numpy. The page draws every frame as a pure
 function of time (window.raceFrame and window.heatFrame in site/index.html), so the video is
 exact and repeatable. The timeline is shared with tools/promo/sound.py.
+
+docs/race.gif (the README's race) is the race scene of this video, cut with:
+  ffmpeg -ss 2.6 -t 6.4 -i out.mp4 -vf "fps=12,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5" docs/race.gif
 """
 import asyncio, os, subprocess, sys, tempfile
 
