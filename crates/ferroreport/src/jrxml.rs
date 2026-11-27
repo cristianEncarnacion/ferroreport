@@ -249,6 +249,9 @@ struct StyleProps {
     mode: Option<Mode>,
     halign: Option<HAlign>,
     valign: Option<VAlign>,
+    /// `hImageAlign` and `vImageAlign` of a style, as written (icon labels take them).
+    himage: Option<String>,
+    vimage: Option<String>,
     line_spacing: Option<String>,
     line_spacing_size: Option<f32>,
     first_line_indent: Option<i32>,
@@ -288,6 +291,8 @@ impl StyleProps {
             mode,
             halign,
             valign,
+            himage,
+            vimage,
             line_spacing,
             line_spacing_size,
             first_line_indent,
@@ -416,6 +421,8 @@ impl StyleProps {
         let mut s = StyleProps::default();
         s.read_font_attrs(n);
         s.read_alignment(n);
+        s.himage = attr(n, &["hImageAlign", "horizontalImageAlign"]).map(str::to_string);
+        s.vimage = attr(n, &["vImageAlign", "verticalImageAlign"]).map(str::to_string);
         s.read_colors(n);
         if let Some(v) = n.attr("pattern") {
             s.pattern = Some(v.to_string());
@@ -2229,19 +2236,21 @@ impl Parser {
             "ellipse" => ElementKind::Ellipse { pen: props.graphic_pen.resolve(1.0, forecolor) },
             "frame" => ElementKind::Frame { children: self.elements(n)?, boxed: props.box_style(forecolor) },
             "componentElement" | "component" if component_node(n, "iconLabel").is_some() => {
-                // An icon next to a label, drawn as a frame of two texts: the icon in a square
-                // as tall as the element, at the start or the end, the label in the rest.
+                // A label and an icon, drawn as a frame of their two text fields (see
+                // `crate::iconlabel`): the filler measures them and places them.
                 let c = component_node(n, "iconLabel").unwrap_or(n);
-                let geometry = n.child("reportElement").unwrap_or(n);
-                let size = |a: &str| geometry.attr(a).and_then(number::<f32>).unwrap_or(0.0);
-                let (w, h) = (size("width"), size("height"));
-                let icon_w = h.min(w / 3.0);
-                let at_end = c.attr("iconPosition") == Some("End");
+                // The alignment is the component's own (`hAlign`, or `horizontalAlignment` in
+                // JRXML 6), else its element style's image alignment.
+                let settings = crate::iconlabel::Settings::read(&|a| {
+                    let (names, style): (&[&str], _) = match a {
+                        "hAlign" => (&["hAlign", "horizontalAlignment"], &props.himage),
+                        "vAlign" => (&["vAlign", "verticalAlignment"], &props.vimage),
+                        _ => (&[a], &None),
+                    };
+                    attr(c, names).map(str::to_string).or_else(|| style.clone())
+                });
                 let mut children = Vec::new();
-                for (part, x, width) in [
-                    ("label", if at_end { 0.0 } else { icon_w }, w - icon_w),
-                    ("icon", if at_end { w - icon_w } else { 0.0 }, icon_w),
-                ] {
+                for part in ["label", "icon"] {
                     // JRXML 6: <label> and <icon>, each holding a text field. JRXML 7: the text
                     // fields themselves, <labelTextField> and <iconTextField>, read as the
                     // `<element kind="textField">` they are.
@@ -2260,17 +2269,19 @@ impl Parser {
                         .or(v7.as_ref());
                     if let Some(node) = node {
                         let kind = node.attr("kind").unwrap_or(node.name.as_str()).to_string();
-                        let mut el = self.element(node, &kind)?;
-                        (el.x, el.y, el.width, el.height) = (x, 0.0, width, h);
-                        if part == "icon" {
-                            if let ElementKind::Text(te) = &mut el.kind {
-                                te.style.halign = HAlign::Center;
-                            }
-                        }
-                        children.push(el);
+                        children.push(self.element(node, &kind)?);
                     }
                 }
-                ElementKind::Frame { children, boxed: props.box_style(forecolor) }
+                if children.len() == 2 {
+                    children.push(crate::iconlabel::marker(settings));
+                }
+                // The frame's box is the component's own `<box>`, over the box of the
+                // element's style (IconLabelComponent is a box container of that style).
+                let mut own = StyleProps::default();
+                if let Some(b) = c.child("box") {
+                    own.read_box(b);
+                }
+                ElementKind::Frame { children, boxed: own.over(props).box_style(forecolor) }
             }
             "image" => {
                 // RealHeight and RealSize print as RetainShape in an element sized from the
@@ -2596,15 +2607,17 @@ mod tests {
     #[test]
     fn icon_labels_of_both_versions() {
         let v6 = r#"<jasperReport xmlns:c="http://jasperreports.sourceforge.net/jasperreports/components" name="t" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
-            <title><band height="30"><componentElement><reportElement x="0" y="5" width="200" height="10"/>
-            <c:iconLabel iconPosition="Start">
+            <style name="s" vImageAlign="Middle"/>
+            <title><band height="30"><componentElement><reportElement x="0" y="5" width="200" height="10" style="s"/>
+            <c:iconLabel iconPosition="Start" horizontalAlignment="Right">
               <c:label><textField textAdjust="StretchHeight"><reportElement x="0" y="0" width="1" height="1"/><textElement><font size="8.0"/></textElement>
                 <textFieldExpression><![CDATA["This is it!"]]></textFieldExpression></textField></c:label>
               <c:icon><textField><reportElement x="0" y="0" width="1" height="1"/><textFieldExpression><![CDATA[""]]></textFieldExpression></textField></c:icon>
             </c:iconLabel></componentElement></band></title></jasperReport>"#;
         let v7 = r#"<jasperReport name="t" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
-            <title height="30"><element kind="component" x="0" y="5" width="200" height="10">
-            <component kind="iconLabel" iconPosition="Start">
+            <style name="s" vImageAlign="Middle"/>
+            <title height="30"><element kind="component" x="0" y="5" width="200" height="10" style="s">
+            <component kind="iconLabel" iconPosition="Start" hAlign="Right">
               <labelTextField x="0" y="0" width="1" height="1" fontSize="8.0" textAdjust="StretchHeight">
                 <expression><![CDATA["This is it!"]]></expression><box padding="5"><pen lineWidth="1.0"/></box></labelTextField>
               <iconTextField x="0" y="0" width="1" height="1"><expression><![CDATA[""]]></expression></iconTextField>
@@ -2614,17 +2627,22 @@ mod tests {
             let el = &r.title.as_ref().unwrap().elements[0];
             assert_eq!((el.x, el.y, el.width, el.height), (0.0, 5.0, 200.0, 10.0), "{version}");
             let ElementKind::Frame { children, .. } = &el.kind else { panic!("{version}: {:?}", el.kind) };
-            assert_eq!(children.len(), 2, "{version}");
-            // The label after a square icon as tall as the element, then the icon at the start.
-            let (label, icon) = (&children[0], &children[1]);
-            assert_eq!((label.x, label.width, label.height), (10.0, 190.0, 10.0), "{version}");
-            assert_eq!((icon.x, icon.width, icon.height), (0.0, 10.0, 10.0), "{version}");
+            // The label and the icon as designed (the filler places them), and the settings: the
+            // vertical alignment from the vImageAlign of the element's style.
+            let Some((settings, label, icon)) = crate::iconlabel::of(children) else { panic!("{version}: {children:?}") };
+            let written = |a: &str| match a {
+                "iconPosition" => Some("Start".to_string()),
+                "hAlign" => Some("Right".to_string()),
+                "vAlign" => Some("Middle".to_string()),
+                _ => None,
+            };
+            assert_eq!(settings, crate::iconlabel::Settings::read(&written), "{version}");
+            assert_eq!((label.x, label.width, label.height), (0.0, 1.0, 1.0), "{version}");
             let ElementKind::Text(t) = &label.kind else { panic!("{version}") };
             assert_eq!(t.style.font.size, 8.0, "{version}");
             assert!(t.stretch, "{version}");
             assert!(format!("{:?}", t.content).contains("This is it!"), "{version}");
             let ElementKind::Text(t) = &icon.kind else { panic!("{version}") };
-            assert_eq!(t.style.halign, HAlign::Center, "{version}");
             assert!(format!("{:?}", t.content).contains("e001"), "{version}");
         }
         // The padding and pen of the label's own box (written in the 7 form above).

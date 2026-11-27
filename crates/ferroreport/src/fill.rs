@@ -1085,6 +1085,126 @@ fn text_form<'a>(fonts: &mut FontSet, te: &'a TextElement, color: Color, text: &
     }
 }
 
+/// The width of the widest line of `text` laid out in `te` `w` wide, and the height `te` needs
+/// for it, padding included: what JasperReports measures while filling
+/// (`JRFillTextElement.getTextWidth`, and the text height of `chopTextElement`). An empty text
+/// is not measured: no width, no height.
+fn text_extent(fonts: &mut FontSet, te: &TextElement, color: Color, w: f32, text: &str) -> (f32, f32) {
+    if text.is_empty() {
+        return (0.0, 0.0);
+    }
+    let p = te.boxed.padding;
+    match text_form(fonts, te, color, text) {
+        TextForm::Plain(te) => {
+            let hyphenator = fonts.hyphenator();
+            let id = fonts.resolve(&te.style.font);
+            let face = fonts.face(id);
+            let size = te.style.font.size;
+            let lines = break_lines_hyphenated(text, face, size, (w - p.left - p.right).max(0.0), Measure::Fill, hyphenator);
+            let vm = vertical_metrics(face, size, te.style.line_spacing);
+            // A line's own width is the drawn one (iText's); filling measures with AWT's exact
+            // advances (shaped text has them already).
+            let width = |l: &crate::text::Line| {
+                if crate::shape::needs_shaping(&l.text) {
+                    l.width
+                } else {
+                    face.fill_width(&l.text, size)
+                }
+            };
+            (lines.iter().map(width).fold(0.0, f32::max), p.top + p.bottom + vm.block_height(lines.len()))
+        }
+        TextForm::Styled(_) => {
+            let (item, needed) = text_item(fonts, te, color, 0.0, 0.0, w, f32::MAX, text, false);
+            // The runs of a line share its baseline.
+            fn lines(item: &PrintItem, out: &mut Vec<(f32, f32, f32)>) {
+                match item {
+                    PrintItem::Text(t) => out.extend(t.lines.iter().map(|l| (l.baseline, l.x, l.x + l.width))),
+                    PrintItem::Group(items) | PrintItem::Paragraphs(_, items) | PrintItem::Transform(_, items) => {
+                        items.iter().for_each(|i| lines(i, out))
+                    }
+                    PrintItem::Cell(_, item) => lines(item, out),
+                    _ => {}
+                }
+            }
+            let mut all = Vec::new();
+            lines(&item, &mut all);
+            let mut widest = 0.0f32;
+            for &(baseline, ..) in &all {
+                let on = all.iter().filter(|l| (l.0 - baseline).abs() < 1e-3);
+                let (start, end) = on.fold((f32::INFINITY, f32::NEG_INFINITY), |(s, e), l| (s.min(l.1), e.max(l.2)));
+                widest = widest.max(end - start);
+            }
+            (widest, needed)
+        }
+    }
+}
+
+/// Measures an icon label (a frame with [`crate::iconlabel::of`]) as JasperReports prepares it.
+fn prepare_icon_label(
+    le: &mut LayoutEnv,
+    el: &Element,
+    boxed: &BoxStyle,
+    label: &Element,
+    icon: &Element,
+) -> Result<crate::iconlabel::Prepared> {
+    // The text of each field; a field not printed (or evaluated later) measures nothing.
+    fn field<'e>(le: &LayoutEnv, child: &'e Element) -> Result<(&'e TextElement, String)> {
+        let ElementKind::Text(te) = &child.kind else { unreachable!("an icon label's fields are texts") };
+        let visible = match &child.print_when {
+            Some(e) => condition(&eval(e, le.scope, le.env)?, le.env)?,
+            None => true,
+        };
+        let deferred = matches!(&te.content, TextContent::Expression { evaluation_time, .. }
+            if !matches!(evaluation_time, EvaluationTime::Now | EvaluationTime::Band));
+        let text = if visible && !deferred { text_value_full(&te.content, le.scope, le.env)?.text } else { String::new() };
+        Ok((te, text))
+    }
+    let (label_te, label_text) = field(le, label)?;
+    let (icon_te, icon_text) = field(le, icon)?;
+    let fonts = &mut *le.fonts;
+    let mut measure = |is_icon: bool, w: f32| {
+        let (child, te, text) = if is_icon { (icon, icon_te, &icon_text) } else { (label, label_te, &label_text) };
+        let (text_width, needed) = text_extent(fonts, te, child.forecolor, w, text);
+        // A field that stretches is as tall as its text, in whole points, or as designed.
+        let height = if te.stretch { child.height.max((needed - 1e-3).ceil()) } else { child.height };
+        crate::iconlabel::Measured { text_width, height }
+    };
+    let pad = |te: &TextElement| te.boxed.padding.left + te.boxed.padding.right;
+    let fields = crate::iconlabel::Fields {
+        label_padding: pad(label_te),
+        icon_padding: pad(icon_te),
+        icon_font_size: icon_te.style.font.size,
+        label_stretches: label_te.stretch,
+    };
+    Ok(crate::iconlabel::prepare(el.width, el.height, boxed.padding, f32::INFINITY, &fields, &mut measure))
+}
+
+/// The label and the icon of an icon label placed in its frame, `width` wide and finally
+/// `height` tall.
+fn icon_label_children(
+    settings: crate::iconlabel::Settings,
+    prepared: &crate::iconlabel::Prepared,
+    boxed: &BoxStyle,
+    label: &Element,
+    icon: &Element,
+    width: f32,
+    height: f32,
+) -> Vec<Element> {
+    let placed = crate::iconlabel::place(settings, prepared, width, boxed.padding, height);
+    let put = |e: &Element, [x, y, w, h]: [f32; 4]| {
+        let mut e = e.clone();
+        // Inside the frame's padding (exporters offset a frame's elements by it); the fields
+        // do not stretch with the frame.
+        (e.x, e.y, e.width, e.height) = (prepared.left + x, boxed.padding.top + y, w, h);
+        e.stretch_type = StretchType::NoStretch;
+        e.position_type = PositionType::Fix;
+        e
+    };
+    let mut out = vec![put(label, placed.label)];
+    out.extend(placed.icon.map(|b| put(icon, b)));
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 fn plain_text_item(
     fonts: &mut FontSet,
@@ -1404,6 +1524,9 @@ struct Measured {
     image_box: Option<(f32, f32)>,
     /// A crosstab: where it starts, and the room it gets on this page (`None`: all of it).
     crosstab: Option<(crate::crosstab::Rest, Option<f32>)>,
+    /// An icon label: its settings and what measuring it gave, to place its fields again once
+    /// its final height is known.
+    icon_label: Option<(crate::iconlabel::Settings, crate::iconlabel::Prepared)>,
 }
 
 /// Lays out `elements` in a container of design height `design_h`. With `avail`, content
@@ -1458,6 +1581,7 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
             symbol: None,
             crosstab: None,
             image_box: None,
+            icon_label: None,
         };
         if visible {
             match &el.kind {
@@ -1494,6 +1618,20 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
                             m.image_box = Some((dx, w));
                         }
                     }
+                }
+                ElementKind::Frame { children, boxed } if crate::iconlabel::of(children).is_some() => {
+                    let Some((settings, label, icon)) = crate::iconlabel::of(children) else { unreachable!() };
+                    // It takes the room it asks for in the band, never less than designed, but
+                    // is printed as tall as it asks to be (see step 4), its fields placed for
+                    // that height.
+                    let prepared = prepare_icon_label(le, el, boxed, label, icon)?;
+                    m.new_h = el.height.max(prepared.height);
+                    let fields = icon_label_children(settings, &prepared, boxed, label, icon, el.width, prepared.height);
+                    let inner = layout_elements(le, &fields, prepared.height, None)?;
+                    printed_values.extend(inner.printed_values.iter().cloned());
+                    returns.extend(inner.returns.iter().cloned());
+                    m.children = Some(inner);
+                    m.icon_label = Some((settings, prepared));
                 }
                 ElementKind::Frame { children, .. } => {
                     let inner = layout_elements(le, children, el.height, None)?;
@@ -1680,6 +1818,13 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
             StretchType::ContainerBottom => h = height - y,
             StretchType::NoStretch => {}
         }
+        // An icon label that does not stretch with its container is printed as tall as it
+        // asked to be, even when that is less than its designed height: JasperReports gives
+        // the component the height it prepared (JRFillComponentElement.setStretchHeight), not
+        // the element's, unless the container stretches it further.
+        if let (Some((_, p)), StretchType::NoStretch) = (&m.icon_label, el.stretch_type) {
+            h = p.height;
+        }
         if el.position_type == PositionType::FixRelativeToBottom {
             y += growth;
         }
@@ -1760,6 +1905,16 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
                             continue;
                         }
                         m.text = Some(text);
+                        h = a - y;
+                    }
+                    // An icon label is not split: one whose designed height does not fit moves
+                    // whole to the next page (JRFillComponentElement.prepare); the rest ends at
+                    // the cut.
+                    ElementKind::Frame { children, .. } if crate::iconlabel::of(children).is_some() => {
+                        if y + el.height > a + 1e-3 {
+                            rest.push(frozen(le.fonts, el, None));
+                            continue;
+                        }
                         h = a - y;
                     }
                     ElementKind::Frame { children, boxed } => {
@@ -1971,7 +2126,16 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
                 });
                 close_mark(&mut out.items, mark);
             }
-            ElementKind::Frame { boxed, .. } => {
+            ElementKind::Frame { boxed, children } => {
+                // An icon label printed taller than it asked to be (stretched with its container)
+                // or cut places its fields again for the height it has: JasperReports fills the
+                // component after giving it its final height.
+                if let (Some((settings, prepared)), Some((_, label, icon))) = (&m.icon_label, crate::iconlabel::of(children)) {
+                    if (h - prepared.height).abs() > 1e-3 {
+                        let fields = icon_label_children(*settings, prepared, boxed, label, icon, w, h);
+                        m.children = Some(layout_elements(le, &fields, h, None)?);
+                    }
+                }
                 let frame_box = frame_split.as_ref().map(|f| f.1).unwrap_or(*boxed);
                 let mark = open_mark(&mut out.items, el, Shape::Frame, Some(frame_box), x, y, w, h);
                 if el.mode == Mode::Opaque {

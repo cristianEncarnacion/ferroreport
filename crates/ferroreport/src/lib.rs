@@ -32,6 +32,7 @@ pub mod fonts;
 pub mod format;
 mod grid;
 pub mod html;
+mod iconlabel;
 pub mod image;
 pub mod jrxml;
 pub mod model;

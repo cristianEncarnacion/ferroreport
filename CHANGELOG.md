@@ -30,6 +30,24 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   `DATERANGE("WEEK")`. `es_419` takes Java's `¤` as its currency sign, `es_US` is no longer
   es_MX, and `es` is no longer es_ES in `REPORT_LOCALE`. Tags Java does not have still take
   es_419's.
+- Icon labels place their label and icon where `hAlign` and `vAlign` say (or the
+  `hImageAlign` and `vImageAlign` of the element's style), as JasperReports 7 does: side by side
+  as one block left, centered or right, each at the top, middle or bottom; one above the other,
+  each left, centered or right, as one block up and down. JasperReports' iconlabel sample now
+  comes out the same.
+- A text narrower than its characters, broken one character a line, no longer ends with an
+  empty line: a stretching text field 6 points wide with `Ab` is two lines tall, as in
+  JasperReports, not three.
+- Icon labels are sized as JasperReports 7 sizes them: the icon as wide as its text, half its
+  font size from the label, which gets the rest of the width, or shrinks to its text unless
+  `labelFill` is `Horizontal` or `Both`; with `Vertical` or `Both` it is as tall as the element.
+  Both go inside the component's padding (its own `<box>` is read), the icon above or below the
+  label when it does not fit beside it, and the element is printed as tall as its content asks.
+  Before, the icon had a square as tall as the element and the label the rest.
+- tools/samples.py gives ferroreport the font extensions inside the JasperReports jars as resource
+  folders, as JasperReports finds them on its class path. The iconlabel sample draws its icons in
+  "JasperReports Icons", the icon font of JasperReports' core jar (not of the sample), which
+  ferroreport does not have built in; it was drawn without them.
 - Thermometer charts are drawn as JasperReports 7 draws them (JFreeChart's `ThermometerPlot`):
   the bulb and stem at their fixed size with both outlines, the mercury and its rounded top,
   the range marks where each range starts in green, orange and red, the axis with whole-number
