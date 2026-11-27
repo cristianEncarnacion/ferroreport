@@ -155,6 +155,7 @@ ferroreport render invoice.jrxml --data rows.json -o invoice.xlsx   # Excel (or 
 ferroreport doctor invoice.jrxml     # what in this template is (not yet) supported
 ferroreport migrate reports/ --report migration.md   # the same for a whole folder
 ferroreport migrate reports/ --jasper jasper/lib --strict   # and compared with JasperReports itself
+ferroreport migrate reports/ --jasper jasper/lib --strict-pixels   # failing too when a page looks different
 ferroreport convert invoice.jrxml -o invoice.ferro   # the same template in ferroreport's format
 ```
 

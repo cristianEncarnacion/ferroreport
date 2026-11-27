@@ -125,6 +125,9 @@ report written to migration.md</pre>
           same as JSON, with the elements each template uses.</li>
         <li><code>--strict</code> makes the command fail when a template uses something not supported yet, stops when rendered with no rows, or
           differs from JasperReports; without it, only a template that cannot be loaded fails it. Use it in CI once the folder passes.</li>
+        <li><code>--strict-pixels</code> (with <code>--jasper</code>) also fails it when a page looks different from JasperReports' (over 0.15% of its
+          ink, as compared pixel by pixel), or when the pages could not be compared because <code>pdftoppm</code> is not on the PATH. Add it when
+          your templates already match pixel for pixel and you want CI to keep it so.</li>
         <li><code>--to ferro --out converted/</code> (or <code>--to jrxml</code>) also writes every template converted, in the same
           folders. You don't need this to migrate: ferroreport renders JRXML as it is.</li>
         <li>For a single template, <code>ferroreport doctor invoice.jrxml</code> lists what it uses and whether each part is supported.</li>

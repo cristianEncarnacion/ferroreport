@@ -108,6 +108,10 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 - Examples: a bank account statement (`examples/bank-statement/`), with a running balance,
   debit and credit columns, monthly groups with totals and a closing summary. It renders the
   same as in JasperReports 7.1.1.
+- `migrate --strict-pixels` (with `--jasper`) fails when a page of a template both engines
+  render is a different picture (over 0.15% of its ink), listing each template with its worst
+  page, or when the pages could not be compared (no `pdftoppm`). `--strict` and `same` do not
+  change.
 
 ## 1.3.0
 

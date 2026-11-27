@@ -354,7 +354,7 @@ ferroreport convert old.jrxml --to jrxml -o new.jrxml   # JRXML 6 -&gt; JRXML 7<
 <pre data-lang="usage">ferroreport render &lt;template.jrxml|template.ferro&gt; [options]
 ferroreport doctor &lt;template&gt;
 ferroreport convert &lt;template&gt; [-o &lt;output&gt;] [--to ferro|jrxml]
-ferroreport migrate &lt;folder|templates...&gt; [--report &lt;file.md|file.json&gt;] [--resources &lt;dir&gt;] [--strict] [--jasper &lt;lib&gt; [--keep &lt;dir&gt;]] [--to ferro|jrxml --out &lt;dir&gt;]
+ferroreport migrate &lt;folder|templates...&gt; [--report &lt;file.md|file.json&gt;] [--resources &lt;dir&gt;] [--strict] [--jasper &lt;lib&gt; [--keep &lt;dir&gt;] [--strict-pixels]] [--to ferro|jrxml --out &lt;dir&gt;]
 ferroreport serve [options]</pre>
       <h3>render</h3>
       <table>
@@ -408,7 +408,8 @@ ferroreport render invoice.jrxml -d rows.json \
         <code>--report migration.md</code> (o <code>.json</code>) escribe el resultado de cada plantilla. Con <code>--to ferro --out converted/</code>
         (o <code>--to jrxml</code>, para JRXML 7) también escribe cada plantilla convertida, en las mismas carpetas. Termina con 1 cuando una
         plantilla no se puede cargar, así que puede detener un build; con <code>--strict</code> también cuando una usa algo que todavía no está soportado,
-        se detiene al generarla sin filas, o difiere de JasperReports.</p>
+        se detiene al generarla sin filas, o difiere de JasperReports. <code>--strict-pixels</code> (con <code>--jasper</code>) también lo hace fallar
+        cuando una página de una plantilla que generan los dos motores es otra imagen, o cuando las páginas no se pudieron comparar (sin <code>pdftoppm</code>).</p>
       <p>La <a href="migrate.html">guía de migración</a> lleva un proyecto de JasperReports por este proceso paso a paso.</p>
       <h3 id="migrate-jasper">Comparado con el propio JasperReports</h3>
       <p>Con <code>--jasper lib/</code>, la carpeta de tus jars de JasperReports (6 o 7, con sus dependencias, como los corre tu

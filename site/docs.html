@@ -353,7 +353,7 @@ ferroreport convert old.jrxml --to jrxml -o new.jrxml   # JRXML 6 -&gt; JRXML 7<
 <pre data-lang="usage">ferroreport render &lt;template.jrxml|template.ferro&gt; [options]
 ferroreport doctor &lt;template&gt;
 ferroreport convert &lt;template&gt; [-o &lt;output&gt;] [--to ferro|jrxml]
-ferroreport migrate &lt;folder|templates...&gt; [--report &lt;file.md|file.json&gt;] [--resources &lt;dir&gt;] [--strict] [--jasper &lt;lib&gt; [--keep &lt;dir&gt;]] [--to ferro|jrxml --out &lt;dir&gt;]
+ferroreport migrate &lt;folder|templates...&gt; [--report &lt;file.md|file.json&gt;] [--resources &lt;dir&gt;] [--strict] [--jasper &lt;lib&gt; [--keep &lt;dir&gt;] [--strict-pixels]] [--to ferro|jrxml --out &lt;dir&gt;]
 ferroreport serve [options]</pre>
       <h3>render</h3>
       <table>
@@ -407,7 +407,8 @@ ferroreport render invoice.jrxml -d rows.json \
         <code>--report migration.md</code> (or <code>.json</code>) writes every template's result. With <code>--to ferro --out converted/</code>
         (or <code>--to jrxml</code>, for JRXML 7) it also writes each template converted, in the same folders. It exits with 1 when a
         template cannot be loaded, so it can stop a build; with <code>--strict</code> also when one uses something not supported yet,
-        stops when rendered with no rows, or differs from JasperReports.</p>
+        stops when rendered with no rows, or differs from JasperReports. <code>--strict-pixels</code> (with <code>--jasper</code>) also fails it
+        when a page of a template both engines render is a different picture, or when the pages could not be compared (no <code>pdftoppm</code>).</p>
       <p>The <a href="migrate.html">migration guide</a> takes a JasperReports project through it step by step.</p>
       <h3 id="migrate-jasper">Compared with JasperReports itself</h3>
       <p>With <code>--jasper lib/</code>, the folder of your JasperReports jars (6 or 7, with their dependencies, as your application
