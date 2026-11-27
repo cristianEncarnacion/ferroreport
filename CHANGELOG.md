@@ -21,6 +21,15 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   fr_DZ, fr_DJ, fr_SY, fr_MR, fr_TN, fr_VU and fr_TD use a 12-hour clock (short date and time,
   `TIME()`), and `DATERANGE("WEEK")` starts on Saturday in fr_DZ, fr_DJ and fr_SY. Before, these
   tags printed fr_FR's. Other `fr_` tags (fr_MC, fr_RE...) still take fr_FR's.
+- Every Spanish locale Java 21.0.13 has prints its own numbers and dates: `es` (`¤`, weeks from
+  Sunday), es_AR, es_CO, es_CL, es_PE, es_VE, es_UY, es_EC, es_GT, es_CR, es_BO, es_PY, es_SV,
+  es_HN, es_NI, es_PA, es_PR, es_CU, es_US, es_BZ, es_BR, es_PH, es_GQ, es_EA and es_IC, with
+  their separators (`1.234,50` in Argentina, Colombia, Chile, Uruguay...), currency, month names
+  (`setiembre` in Peru and Uruguay), short date and time (`05-07-26, 14:07` in Chile), `TIME()`
+  without a pattern (a 12-hour clock in CO, VE, PA, PR, PH and US) and first day of
+  `DATERANGE("WEEK")`. `es_419` takes Java's `¤` as its currency sign, `es_US` is no longer
+  es_MX, and `es` is no longer es_ES in `REPORT_LOCALE`. Tags Java does not have still take
+  es_419's.
 - Thermometer charts are drawn as JasperReports 7 draws them (JFreeChart's `ThermometerPlot`):
   the bulb and stem at their fixed size with both outlines, the mercury and its rounded top,
   the range marks where each range starts in green, orange and red, the axis with whole-number
@@ -76,10 +85,7 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 - Spanish locales print what Java 21.0.13 prints: AM/PM with a no-break space (`p. m.`), the
   short date and time of a date without a pattern for es_DO (`5/7/26, 2:07 p. m.`) and es_MX
   (`05/07/26, 14:07`), and `TIME()` without a pattern for es_DO (`10:30:15 a. m. UTC`) and
-  es_MX (`10:30:15 UTC`). The other Spanish tags (`es_419`, `es_AR`, `es_UY`...) keep es_DO's
-  numbers with Java's 24-hour clock (`5/7/26, 14:07`, `TIME()` `10:30:15 UTC`) and are
-  `es_419` in `REPORT_LOCALE` and the PDF's language (before `es_DO`, and `es_MX` for
-  `es_419`, whose currency sign is now `RD$` instead of `$`).
+  es_MX (`10:30:15 UTC`).
 - Portuguese number and date formats, as Java 21 has them: `pt`, `pt_BR` and `pt_PT` (other `pt_`
   tags take pt_PT's), with their separators (a no-break space between groups in Portugal),
   currency, month and day names, AM/PM ("da manhã" / "da tarde" in Portugal), short date and

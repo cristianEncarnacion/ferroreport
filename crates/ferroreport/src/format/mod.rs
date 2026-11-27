@@ -26,10 +26,16 @@ pub fn short_date_time(locale: &Locale) -> &'static str {
         "it" | "it_IT" => "dd/MM/yy, HH:mm",
         "it_CH" => "dd.MM.yy, HH:mm",
         t if t.starts_with("de") => "dd.MM.yy, HH:mm",
-        "es_DO" => "d/M/yy, h:mm\u{202F}a",
+        "es_DO" | "es_VE" | "es_PH" => "d/M/yy, h:mm\u{202F}a",
+        "es_CO" => "d/MM/yy, h:mm\u{202F}a",
+        "es_PA" | "es_PR" => "MM/dd/yy, h:mm\u{202F}a",
+        "es_US" => "d/M/y, h:mm\u{202F}a",
         "es_MX" => "dd/MM/yy, HH:mm",
-        "es_419" => "d/M/yy, HH:mm",
-        t if t.starts_with("es") => "d/M/yy, H:mm",
+        "es_CL" => "dd-MM-yy, HH:mm",
+        "es_GT" | "es_PE" => "d/MM/yy, HH:mm",
+        "es" | "es_ES" | "es_EA" | "es_IC" | "es_GQ" => "d/M/yy, H:mm",
+        // es_419, es_AR and the other Spanish-speaking countries.
+        t if t.starts_with("es") => "d/M/yy, HH:mm",
         _ => "M/d/yy, h:mm\u{202F}a",
     }
 }

@@ -29,7 +29,7 @@ What it does not do (by design or not yet):
 - It runs no Java code: scriptlets are not run, and expressions cannot call Java classes of your own (static methods, connections built with `DriverManager`). `ferroreport doctor` and `ferroreport migrate` report scriptlets; a call to an unknown class is an error when the expression is evaluated.
 - Queries in languages other than SQL (HQL, XPath, MDX, MongoDB) and Oracle are not run: pass the rows instead.
 - Images are read from files, base64 or `byte[]`, never from remote URLs, and only from the template's resource directories (by design).
-- Not yet: XLS (the old Excel format), maps and other custom components, chart customizers and themes, font extension jars (fonts are registered with `--font` and font sets with `--font-set`), locales other than en_US, es_DO, es_MX, es_ES, French, Portuguese, Italian and German, and exporter properties other than those the README lists.
+- Not yet: XLS (the old Excel format), maps and other custom components, chart customizers and themes, font extension jars (fonts are registered with `--font` and font sets with `--font-set`), locales other than en_US, Spanish, French, Portuguese, Italian and German, and exporter properties other than those the README lists.
 
 Install and first render (examples copied from the README):
 

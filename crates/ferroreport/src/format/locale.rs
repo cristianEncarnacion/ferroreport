@@ -39,7 +39,8 @@ pub const EN_US: Locale = Locale {
     am_pm: ["AM", "PM"],
 };
 
-/// Spanish with the Latin-American number symbols used in DO, MX and US.
+/// Spanish with the Latin-American number symbols used in DO, MX and US: a point for decimals
+/// and a comma between groups.
 pub const ES_DO: Locale = Locale {
     tag: "es_DO",
     decimal_separator: '.',
@@ -59,10 +60,86 @@ pub const ES_MX: Locale = Locale { tag: "es_MX", currency_symbol: "$", ..ES_DO }
 pub const ES_ES: Locale =
     Locale { tag: "es_ES", decimal_separator: ',', grouping_separator: '.', currency_symbol: "€", ..ES_DO };
 
-/// Spanish for Latin America, and the Spanish-speaking countries without their own entry here
-/// (es_AR, es_CL, es_UY...): es_DO's number symbols, with the 24-hour clock Java 21 gives them in
-/// the short date and time and in `TIME()`.
-pub const ES_419: Locale = Locale { tag: "es_419", ..ES_DO };
+/// Spanish without a country, as Java 21 has it: Spain's symbols with the generic currency sign
+/// `¤`, as no country says which currency, and weeks starting on Sunday.
+pub const ES: Locale = Locale { tag: "es", currency_symbol: "\u{A4}", ..ES_ES };
+
+/// Spanish (Ceuta and Melilla): Spain's symbols with the generic currency sign `¤`, as Java 21
+/// has it.
+pub const ES_EA: Locale = Locale { tag: "es_EA", currency_symbol: "\u{A4}", ..ES_ES };
+/// Spanish (Canary Islands): as es_EA.
+pub const ES_IC: Locale = Locale { tag: "es_IC", ..ES_EA };
+/// Spanish (Equatorial Guinea): Spain's symbols and clock with the CFA franc `FCFA`.
+pub const ES_GQ: Locale = Locale { tag: "es_GQ", currency_symbol: "FCFA", ..ES_ES };
+
+/// Spanish for Latin America, and the Spanish tags Java does not have: es_DO's number symbols
+/// with the generic currency sign `¤`, and the 24-hour clock Java 21 gives it in the short date
+/// and time and in `TIME()`.
+pub const ES_419: Locale = Locale { tag: "es_419", currency_symbol: "\u{A4}", ..ES_DO };
+
+const ES_SETIEMBRE_MONTHS: [&str; 12] =
+    ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "setiembre", "octubre", "noviembre", "diciembre"];
+const ES_SET_SHORT_MONTHS: [&str; 12] =
+    ["ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "set.", "oct.", "nov.", "dic."];
+const ES_DOTTED_SHORT_MONTHS: [&str; 12] =
+    ["ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sept.", "oct.", "nov.", "dic."];
+
+/// Spanish (Argentina): Spain's separators (a comma for decimals, a point between groups) with
+/// `$`, a 24-hour clock with two-digit hours (`d/M/yy, HH:mm`, `TIME()` `HH:mm:ss z`) and weeks
+/// starting on Monday, as in the countries below.
+pub const ES_AR: Locale = Locale { tag: "es_AR", currency_symbol: "$", ..ES_ES };
+/// Spanish (Ecuador): as es_AR.
+pub const ES_EC: Locale = Locale { tag: "es_EC", ..ES_AR };
+/// Spanish (Chile): as es_AR, with `dd-MM-yy, HH:mm` for the short date and time.
+pub const ES_CL: Locale = Locale { tag: "es_CL", ..ES_AR };
+/// Spanish (Uruguay): as es_AR, with "setiembre" and short month names with a point (`set.`).
+pub const ES_UY: Locale = Locale { tag: "es_UY", months: ES_SETIEMBRE_MONTHS, short_months: ES_SET_SHORT_MONTHS, ..ES_AR };
+/// Spanish (Bolivia): as es_AR, with the boliviano `Bs`.
+pub const ES_BO: Locale = Locale { tag: "es_BO", currency_symbol: "Bs", ..ES_AR };
+/// Spanish (Costa Rica): as es_AR, with a no-break space (U+00A0) between groups and the colón `₡`.
+pub const ES_CR: Locale = Locale { tag: "es_CR", grouping_separator: '\u{A0}', currency_symbol: "\u{20A1}", ..ES_AR };
+/// Spanish (Paraguay): as es_AR, with the guaraní `Gs.`, short month names with a point and
+/// weeks starting on Sunday.
+pub const ES_PY: Locale = Locale { tag: "es_PY", currency_symbol: "Gs.", short_months: ES_DOTTED_SHORT_MONTHS, ..ES_AR };
+
+/// Spanish (Cuba): es_419's separators and clock with `$`, weeks starting on Monday.
+pub const ES_CU: Locale = Locale { tag: "es_CU", currency_symbol: "$", ..ES_419 };
+/// Spanish (Honduras): es_419's separators and clock with the lempira `L`, weeks starting on
+/// Sunday, as in the countries below.
+pub const ES_HN: Locale = Locale { tag: "es_HN", currency_symbol: "L", ..ES_419 };
+/// Spanish (Nicaragua): as es_HN, with the córdoba `C$`.
+pub const ES_NI: Locale = Locale { tag: "es_NI", currency_symbol: "C$", ..ES_419 };
+/// Spanish (El Salvador): as es_HN, with `C`, the sign Java 21 has for the country's currency.
+pub const ES_SV: Locale = Locale { tag: "es_SV", currency_symbol: "C", ..ES_419 };
+/// Spanish (Belize): as es_HN, with `$`.
+pub const ES_BZ: Locale = Locale { tag: "es_BZ", currency_symbol: "$", ..ES_419 };
+/// Spanish (Brazil): as es_HN, with the real `R$`.
+pub const ES_BR: Locale = Locale { tag: "es_BR", currency_symbol: "R$", ..ES_419 };
+/// Spanish (Guatemala): as es_HN, with the quetzal `Q` and `d/MM/yy, HH:mm` for the short date
+/// and time.
+pub const ES_GT: Locale = Locale { tag: "es_GT", currency_symbol: "Q", ..ES_419 };
+/// Spanish (Peru): as es_GT, with the sol `S/`, "setiembre" and short month names with a point
+/// (`set.`).
+pub const ES_PE: Locale =
+    Locale { tag: "es_PE", currency_symbol: "S/", months: ES_SETIEMBRE_MONTHS, short_months: ES_SET_SHORT_MONTHS, ..ES_419 };
+
+/// Spanish (Colombia): Spain's separators with `$`, a.m./p.m. with a narrow no-break space
+/// (U+202F), and a 12-hour clock (`d/MM/yy, h:mm a`, `TIME()` `h:mm:ss a z`) with weeks
+/// starting on Sunday, as in the countries below and es_DO.
+pub const ES_CO: Locale = Locale { tag: "es_CO", currency_symbol: "$", am_pm: ["a.\u{202F}m.", "p.\u{202F}m."], ..ES_ES };
+/// Spanish (Venezuela): Spain's separators with the bolívar `Bs.S`, short month names with a point
+/// and es_DO's clock (`d/M/yy, h:mm a`).
+pub const ES_VE: Locale = Locale { tag: "es_VE", currency_symbol: "Bs.S", short_months: ES_DOTTED_SHORT_MONTHS, ..ES_ES };
+/// Spanish (Philippines): Spain's separators with the peso `₱` and es_DO's clock.
+pub const ES_PH: Locale = Locale { tag: "es_PH", currency_symbol: "\u{20B1}", ..ES_ES };
+/// Spanish (Panama): es_DO's separators with the balboa `B/.`, a 12-hour clock and the month
+/// first in the short date (`MM/dd/yy, h:mm a`).
+pub const ES_PA: Locale = Locale { tag: "es_PA", currency_symbol: "B/.", ..ES_DO };
+/// Spanish (Puerto Rico): as es_PA, with `$`.
+pub const ES_PR: Locale = Locale { tag: "es_PR", currency_symbol: "$", ..ES_DO };
+/// Spanish (United States): es_DO's separators with `$`, a 12-hour clock and a four-digit year in
+/// the short date (`d/M/y, h:mm a`).
+pub const ES_US: Locale = Locale { tag: "es_US", currency_symbol: "$", ..ES_DO };
 
 const FR_MONTHS: [&str; 12] =
     ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -326,8 +403,33 @@ impl Locale {
         let norm = tag.replace('-', "_");
         match norm.as_str() {
             "es_DO" => &ES_DO,
-            "es_MX" | "es_US" => &ES_MX,
-            "es" | "es_ES" => &ES_ES,
+            "es_MX" => &ES_MX,
+            "es" => &ES,
+            "es_ES" => &ES_ES,
+            "es_EA" => &ES_EA,
+            "es_IC" => &ES_IC,
+            "es_GQ" => &ES_GQ,
+            "es_AR" => &ES_AR,
+            "es_EC" => &ES_EC,
+            "es_CL" => &ES_CL,
+            "es_UY" => &ES_UY,
+            "es_BO" => &ES_BO,
+            "es_CR" => &ES_CR,
+            "es_PY" => &ES_PY,
+            "es_CU" => &ES_CU,
+            "es_HN" => &ES_HN,
+            "es_NI" => &ES_NI,
+            "es_SV" => &ES_SV,
+            "es_BZ" => &ES_BZ,
+            "es_BR" => &ES_BR,
+            "es_GT" => &ES_GT,
+            "es_PE" => &ES_PE,
+            "es_CO" => &ES_CO,
+            "es_VE" => &ES_VE,
+            "es_PH" => &ES_PH,
+            "es_PA" => &ES_PA,
+            "es_PR" => &ES_PR,
+            "es_US" => &ES_US,
             _ if norm == "es_419" || norm.starts_with("es_") => &ES_419,
             "fr" => &FR,
             "fr_BE" => &FR_BE,
@@ -688,6 +790,98 @@ mod tests {
             }
             assert_eq!(format_value(&Value::Date(when), None, locale), expected[6], "{tag} short");
         }
+    }
+
+    /// What Java 21.0.13 prints for the other Spanish locales, for -1234567.5 and 5 July 2026
+    /// 14:07:09 (the patterns of `french_is_javas`) and a date without a pattern.
+    #[test]
+    fn spanish_regions_are_javas() {
+        use crate::format::format_value;
+        use crate::value::Value;
+        let when = chrono::NaiveDate::from_ymd_opt(2026, 7, 5).unwrap().and_hms_opt(14, 7, 9).unwrap();
+        // -1234567.5 with Spain's separators, with es_DO's, and Costa Rica's.
+        let spain = "1.234.567,50";
+        let dominican = "1,234,567.50";
+        let costa_rica = "1\u{A0}234\u{A0}567,50";
+        let spanish = |number: &str, currency: &str, july: &str, pm: &str, short: &str| -> [String; 7] {
+            [
+                format!("-{number}"),
+                format!("-{currency} {number}"),
+                format!("-{number} {currency}"),
+                "domingo 5 julio 2026".to_string(),
+                format!("dom 5 {july} 26"),
+                format!("2:07 {pm}"),
+                short.to_string(),
+            ]
+        };
+        let pm = "p.\u{A0}m.";
+        let cases = [
+            ("es", spanish(spain, "\u{A4}", "jul", pm, "5/7/26, 14:07")),
+            ("es_EA", spanish(spain, "\u{A4}", "jul", pm, "5/7/26, 14:07")),
+            ("es_IC", spanish(spain, "\u{A4}", "jul", pm, "5/7/26, 14:07")),
+            ("es_GQ", spanish(spain, "FCFA", "jul", pm, "5/7/26, 14:07")),
+            ("es_AR", spanish(spain, "$", "jul", pm, "5/7/26, 14:07")),
+            ("es_EC", spanish(spain, "$", "jul", pm, "5/7/26, 14:07")),
+            ("es_BO", spanish(spain, "Bs", "jul", pm, "5/7/26, 14:07")),
+            ("es_UY", spanish(spain, "$", "jul.", pm, "5/7/26, 14:07")),
+            ("es_CL", spanish(spain, "$", "jul", pm, "05-07-26, 14:07")),
+            ("es_PY", spanish(spain, "Gs.", "jul.", pm, "5/7/26, 14:07")),
+            ("es_CR", spanish(costa_rica, "\u{20A1}", "jul", pm, "5/7/26, 14:07")),
+            ("es_419", spanish(dominican, "\u{A4}", "jul", pm, "5/7/26, 14:07")),
+            ("es_CU", spanish(dominican, "$", "jul", pm, "5/7/26, 14:07")),
+            ("es_HN", spanish(dominican, "L", "jul", pm, "5/7/26, 14:07")),
+            ("es_NI", spanish(dominican, "C$", "jul", pm, "5/7/26, 14:07")),
+            ("es_SV", spanish(dominican, "C", "jul", pm, "5/7/26, 14:07")),
+            ("es_BZ", spanish(dominican, "$", "jul", pm, "5/7/26, 14:07")),
+            ("es_BR", spanish(dominican, "R$", "jul", pm, "5/7/26, 14:07")),
+            ("es_GT", spanish(dominican, "Q", "jul", pm, "5/07/26, 14:07")),
+            ("es_PE", spanish(dominican, "S/", "jul.", pm, "5/07/26, 14:07")),
+            ("es_CO", spanish(spain, "$", "jul", "p.\u{202F}m.", "5/07/26, 2:07\u{202F}p.\u{202F}m.")),
+            ("es_VE", spanish(spain, "Bs.S", "jul.", pm, "5/7/26, 2:07\u{202F}p.\u{A0}m.")),
+            ("es_PH", spanish(spain, "\u{20B1}", "jul", pm, "5/7/26, 2:07\u{202F}p.\u{A0}m.")),
+            ("es_PA", spanish(dominican, "B/.", "jul", pm, "07/05/26, 2:07\u{202F}p.\u{A0}m.")),
+            ("es_PR", spanish(dominican, "$", "jul", pm, "07/05/26, 2:07\u{202F}p.\u{A0}m.")),
+            ("es_US", spanish(dominican, "$", "jul", pm, "5/7/2026, 2:07\u{202F}p.\u{A0}m.")),
+        ];
+        // One of them written out, as Java printed it.
+        assert_eq!(
+            cases[4].1,
+            [
+                "-1.234.567,50",
+                "-$ 1.234.567,50",
+                "-1.234.567,50 $",
+                "domingo 5 julio 2026",
+                "dom 5 jul 26",
+                "2:07 p.\u{A0}m.",
+                "5/7/26, 14:07"
+            ]
+        );
+        let patterns =
+            ["#,##0.00", "\u{A4} #,##0.00", "#,##0.00 \u{A4};-#,##0.00 \u{A4}", "EEEE d MMMM yyyy", "EEE d MMM yy", "h:mm a"];
+        for (tag, expected) in &cases {
+            for alias in [tag.to_string(), tag.replace('_', "-")] {
+                let locale = Locale::from_tag(&alias);
+                assert_eq!(locale.tag, *tag);
+                for (i, pattern) in patterns.iter().enumerate() {
+                    let value = if i < 3 { Value::Double(-1234567.5) } else { Value::Date(when) };
+                    assert_eq!(format_value(&value, Some(pattern), locale), expected[i], "{tag} {pattern}");
+                }
+                assert_eq!(format_value(&Value::Date(when), None, locale), expected[6], "{tag} short");
+            }
+        }
+        // September in Peru and Uruguay, and with a point in Paraguay and Venezuela.
+        let september = Value::Date(chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap().and_hms_opt(0, 0, 0).unwrap());
+        for (tag, want) in [
+            ("es_PE", "setiembre set."),
+            ("es_UY", "setiembre set."),
+            ("es_PY", "septiembre sept."),
+            ("es_VE", "septiembre sept."),
+            ("es_AR", "septiembre sept"),
+        ] {
+            assert_eq!(format_value(&september, Some("MMMM MMM"), Locale::from_tag(tag)), want, "{tag}");
+        }
+        // Tags Java does not have take es_419's.
+        assert_eq!(Locale::from_tag("es_XX").tag, "es_419");
     }
 
     /// What Java 21.0.13 prints for Portuguese, for -1234567.5 and 5 July 2026 14:07:09 (the
