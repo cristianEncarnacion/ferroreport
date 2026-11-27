@@ -97,6 +97,13 @@ relative paths inside `--templates`. A failure while rendering one request answe
 does not stop the server. `GET /health` answers without the token (it only says the server is up); every other
 path, `GET /metrics` included, needs it.
 
+The access log (`--access-log`, plain or `json`) holds the method, the path without its query,
+the status, the time, the request ID and, for a render, the template's name, the format and how
+many pages, rows and bytes came out, and the error message the client was sent. It never holds
+the token, the request body, parameter values or rows. An error message can quote a template
+name or a field name from the request. A client's `X-Request-Id` is kept only when it is
+printable ASCII of 128 characters or fewer, so it cannot break a log line or a header.
+
 Every render runs under `--timeout` (60 seconds unless you change it), `--max-pages` and
 `--max-rows` (no limit unless you set one); a render that goes over answers `413` and is counted
 in `ferroreport_render_limited_total`. The number of renders at

@@ -151,8 +151,14 @@ PowerPoint, OpenDocument, CSV or a web preview):
         --max-rows <n>          Most rows a report may read, its subreports' and datasets'
                                 included (default: no limit)
         --cache <n>             Parsed templates kept in memory (default: 128; 0 for none)
-        --access-log            Print a line per request
-    GET /health answers without a token; GET /metrics gives counters for Prometheus.
+        --access-log [json]     Print a line per request to standard error: method, path,
+                                status and time; with json (or FERROREPORT_ACCESS_LOG=json), one
+                                JSON object per line that also has the time, the request ID, the
+                                template, format, pages, rows and bytes, and the error. Never the
+                                token, the body, parameter values or rows
+    GET /health answers without a token; GET /metrics gives counters for Prometheus. Every
+    response carries X-Request-Id: the request's own (printable ASCII, 128 characters at most)
+    or a new one.
 ";
 
 fn main() -> ExitCode {
@@ -1350,7 +1356,11 @@ fn serve(args: &[String]) -> CliResult {
     let mut limits = ferroreport::Limits { max_pages: None, timeout: Some(std::time::Duration::from_secs(60)) };
     let mut max_rows = None;
     let mut cache = 128usize;
-    let mut access_log = false;
+    // `FERROREPORT_ACCESS_LOG=json|text` turns the log on; `--access-log` alone keeps its format.
+    let mut access_log = match std::env::var("FERROREPORT_ACCESS_LOG").ok().filter(|v| !v.is_empty()) {
+        Some(v) => Some(serve::AccessLog::parse(&v).ok_or_else(|| format!("FERROREPORT_ACCESS_LOG is `{v}`: say json or text"))?),
+        None => None,
+    };
     let mut allow_anonymous = std::env::var("FERROREPORT_ALLOW_ANONYMOUS").is_ok_and(|v| !v.is_empty() && v != "0");
     let mut rate_limit = None;
     let megabytes = |name: &str, default: u64| std::env::var(name).ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(default);
@@ -1380,7 +1390,17 @@ fn serve(args: &[String]) -> CliResult {
                 limits.timeout = (secs > 0.0).then(|| std::time::Duration::from_secs_f64(secs));
             }
             "--cache" => cache = value(a)?.parse().map_err(|_| "--cache expects a number of templates")?,
-            "--access-log" => access_log = true,
+            "--access-log" => {
+                let format = it.clone().next().and_then(|v| serve::AccessLog::parse(v));
+                if format.is_some() {
+                    it.next();
+                }
+                access_log = format.or(access_log).or(Some(serve::AccessLog::Text));
+            }
+            s if s.starts_with("--access-log=") => {
+                let v = &s["--access-log=".len()..];
+                access_log = Some(serve::AccessLog::parse(v).ok_or_else(|| format!("--access-log {v}: say json or text"))?);
+            }
             "--allow-anonymous" => allow_anonymous = true,
             "--spool-dir" => spool_dir = Some(PathBuf::from(value(a)?)),
             "--spool-memory" => spool_memory = value(a)?.parse().map_err(|_| "--spool-memory expects megabytes")?,

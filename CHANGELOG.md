@@ -6,6 +6,12 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 
 ## Unreleased
 
+- `ferroreport serve --access-log json` (or `FERROREPORT_ACCESS_LOG=json`) prints one JSON
+  object per request for log platforms: time, request ID, method, path, status, milliseconds;
+  for a render the template, format, pages, rows, bytes and whether it was streamed; on an error
+  the message the client was sent. Never the token, the body, parameter values or rows. Every
+  response carries `X-Request-Id` (the request's own when it is printable ASCII of 128
+  characters or fewer, or a new one). `--access-log` alone prints the same line as before.
 - JasperReports' own samples measured again (`docs/samples*.json`, README): 76 of the 101
   comparable 7.1.1 templates come out the same (74 before) and 42 of the 88 6.20.6 ones (41
   before); the subreport MasterReport sample is the same in both, and the 7.1.1 thermometer

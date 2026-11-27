@@ -28,7 +28,7 @@ use std::io::{BufRead, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 pub struct Config {
@@ -44,8 +44,8 @@ pub struct Config {
     pub max_rows: Option<usize>,
     /// Parsed templates kept (0 turns the cache off).
     pub cache: usize,
-    /// Print a line per request to standard error.
-    pub access_log: bool,
+    /// Print a line per request to standard error, and how.
+    pub access_log: Option<AccessLog>,
     /// Listen beyond localhost without a token.
     pub allow_anonymous: bool,
     /// Most requests one client address may make per minute.
@@ -61,6 +61,123 @@ pub struct Config {
     pub connection: Option<Arc<dyn ferroreport::sql::Connection>>,
     /// Every PDF is signed with this key (`--sign-key`).
     pub signature: Option<ferroreport::sign::Signature>,
+}
+
+/// How `--access-log` prints its line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccessLog {
+    /// Method, path, status and time, as the line has always been.
+    Text,
+    /// One JSON object per line, for log platforms.
+    Json,
+}
+
+impl AccessLog {
+    pub fn parse(s: &str) -> Option<AccessLog> {
+        match s {
+            "text" => Some(AccessLog::Text),
+            "json" => Some(AccessLog::Json),
+            _ => None,
+        }
+    }
+
+    /// The line for one request. Never the token, the body, parameter values or rows: only
+    /// what is in `request` and `log`.
+    fn line(self, entry: &Entry, notes: &Notes) -> String {
+        let Entry { time, id, method, path, status, ms } = entry;
+        if self == AccessLog::Text {
+            return format!("{method} {path} {status} {ms:.1}ms");
+        }
+        let time = chrono::DateTime::<chrono::Utc>::from(*time).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let mut fields: Vec<(&str, serde_json::Value)> = vec![
+            ("time", time.into()),
+            ("request_id", id.as_str().into()),
+            ("method", method.as_str().into()),
+            ("path", path.as_str().into()),
+            ("status", (*status).into()),
+            ("ms", ((ms * 1e3).round() / 1e3).into()),
+        ];
+        if let Some(template) = &notes.template {
+            fields.push(("template", template.as_str().into()));
+        }
+        if let Some(format) = notes.format {
+            fields.push(("format", format.extension().into()));
+        }
+        if let Some(stats) = notes.stats {
+            fields.push(("pages", stats.pages.into()));
+            fields.push(("rows", stats.rows.into()));
+        }
+        if let Some(bytes) = notes.bytes {
+            fields.push(("bytes", bytes.into()));
+        }
+        if notes.format.is_some() {
+            fields.push(("streamed", notes.streamed.into()));
+        }
+        if let Some(error) = &notes.error {
+            fields.push(("error", error.as_str().into()));
+        }
+        // By hand rather than through a map, to keep the fields in this order.
+        let body: Vec<String> = fields.iter().map(|(k, v)| format!("\"{k}\":{v}")).collect();
+        format!("{{{}}}", body.join(","))
+    }
+}
+
+/// What every access log line says: the request and its answer.
+struct Entry {
+    /// When the request arrived.
+    time: SystemTime,
+    id: String,
+    method: String,
+    path: String,
+    status: u16,
+    ms: f64,
+}
+
+/// What the access log says about a render, and why a request failed. Filled while the
+/// request is answered and carried back to the worker loop in its `Outcome`.
+#[derive(Default)]
+struct Notes {
+    /// The name for `/render/<name>` (or `templateName`), `inline` for a template in the body.
+    template: Option<String>,
+    format: Option<ferroreport::Format>,
+    stats: Option<ferroreport::FillStats>,
+    /// Bytes of the document sent.
+    bytes: Option<u64>,
+    streamed: bool,
+    /// The message the client was sent with an error.
+    error: Option<String>,
+}
+
+impl Notes {
+    /// An error answer, noted for the log.
+    fn fail(&mut self, status: u16, message: impl std::fmt::Display) -> Reply {
+        let message = message.to_string();
+        let reply = error(status, &message);
+        self.error = Some(message);
+        reply
+    }
+}
+
+/// The ID of a request: the client's own `X-Request-Id` when it is printable ASCII of 128
+/// characters or fewer, so that a client's error can be matched with the server's line;
+/// otherwise a new one.
+fn request_id(given: Option<&str>) -> String {
+    match given {
+        Some(id) if !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| (b' '..=b'~').contains(&b)) => id.to_string(),
+        _ => new_request_id(),
+    }
+}
+
+/// 32 hexadecimal digits: 16 that differ from one server process to the next (the system's
+/// random hash keys, mixed with the process ID and the time it started) and a counter. Unique
+/// without a dependency for random numbers.
+fn new_request_id() -> String {
+    use std::hash::BuildHasher;
+    static PROCESS: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    static COUNT: AtomicU64 = AtomicU64::new(0);
+    let process =
+        *PROCESS.get_or_init(|| std::collections::hash_map::RandomState::new().hash_one((std::process::id(), SystemTime::now())));
+    format!("{process:016x}{:016x}", COUNT.fetch_add(1, Ordering::Relaxed))
 }
 
 /// Counts each client's requests in the current minute.
@@ -608,6 +725,8 @@ enum OwnedRows {
 enum Piece {
     Data(Vec<u8>),
     Failed(u16, String),
+    /// The render is done (after its last piece), with what it filled.
+    Done(ferroreport::FillStats),
 }
 
 /// Sends what is written to it to the thread that answers the client, 64 KB at a time. A
@@ -658,19 +777,24 @@ struct Streamed {
     rx: std::sync::mpsc::Receiver<Piece>,
 }
 
-/// What a request is answered with.
-enum Outcome {
+/// What a request is answered with, and what the access log says about it.
+struct Outcome {
+    answer: Answer,
+    notes: Notes,
+}
+
+enum Answer {
     Reply(Reply),
     Stream(Streamed),
 }
 
-impl Outcome {
-    fn status(&self) -> u16 {
-        match self {
-            Outcome::Reply(r) => r.status_code().0,
-            Outcome::Stream(_) => 200,
-        }
-    }
+/// How a streamed document went out.
+struct Sent {
+    bytes: u64,
+    /// What the render filled, when it finished.
+    stats: Option<ferroreport::FillStats>,
+    /// Why the document did not go out whole.
+    error: Option<String>,
 }
 
 impl Streamed {
@@ -680,11 +804,12 @@ impl Streamed {
     /// only known to be complete by its last, empty chunk, and the HTTP library writes that
     /// chunk whatever happened. Here a failure writes a line no client accepts as a chunk
     /// instead, so that every client reports an error rather than a document that looks whole.
-    /// Returns whether the document went out complete.
-    fn send(self, mut out: Box<dyn Write + Send>) -> bool {
+    /// Returns how much went out, and why not all of it when the document is not complete.
+    /// `id` is the request's ID (printable ASCII: it cannot end the header).
+    fn send(self, mut out: Box<dyn Write + Send>, id: &str) -> Sent {
         let head = format!(
             "HTTP/1.1 200 OK\r\nServer: ferroreport/{}\r\nDate: {}\r\nContent-Type: {}\r\nPreference-Applied: respond-streaming\r\n\
-             Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+             X-Request-Id: {id}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
             env!("CARGO_PKG_VERSION"),
             httpdate::fmt_http_date(std::time::SystemTime::now()),
             self.format.mime()
@@ -698,25 +823,39 @@ impl Streamed {
             out.write_all(b"\r\n")?;
             out.flush()
         }
+        let mut sent = Sent { bytes: 0, stats: None, error: None };
+        let gone = |mut sent: Sent| {
+            sent.error = Some(GONE.to_string());
+            sent
+        };
         // An error here is the client closing the connection: dropping `rx` on the way out
         // is what tells the renderer to stop.
         if out.write_all(head.as_bytes()).is_err() || chunk(&mut out, &self.first).is_err() {
-            return false;
+            return gone(sent);
         }
+        sent.bytes = self.first.len() as u64;
         loop {
             match self.rx.recv() {
                 Ok(Piece::Data(bytes)) => {
                     if chunk(&mut out, &bytes).is_err() {
-                        return false;
+                        return gone(sent);
                     }
+                    sent.bytes += bytes.len() as u64;
                 }
+                Ok(Piece::Done(stats)) => sent.stats = Some(stats),
                 Ok(Piece::Failed(_, message)) => {
                     let said: String = message.chars().filter(|c| !c.is_control()).take(300).collect();
                     let _ = write!(out, "incomplete: {said}\r\n");
                     let _ = out.flush();
-                    return false;
+                    sent.error = Some(message);
+                    return sent;
                 }
-                Err(_) => return out.write_all(b"0\r\n\r\n").and_then(|_| out.flush()).is_ok(),
+                Err(_) => {
+                    return match out.write_all(b"0\r\n\r\n").and_then(|_| out.flush()) {
+                        Ok(()) => sent,
+                        Err(_) => gone(sent),
+                    };
+                }
             }
         }
     }
@@ -727,13 +866,14 @@ fn typed(format: ferroreport::Format) -> Header {
 }
 
 /// Renders into a spool and answers with the whole document, or with an error and nothing
-/// else. `lines` are the rows still to be read from the request, when they come one per line.
+/// else, with what was filled and the document's size. `lines` are the rows still to be read
+/// from the request, when they come one per line.
 fn respond_whole<'a>(
     state: &Arc<State>,
     job: &'a Job,
     body: &serde_json::Value,
     lines: Option<&'a mut dyn Read>,
-) -> Result<Reply, (u16, String)> {
+) -> Result<(Reply, ferroreport::FillStats, u64), (u16, String)> {
     let again = job.reads_rows_twice();
     let mut rows: Box<dyn FnMut() -> ferroreport::Result<ferroreport::RowIter<'a>> + 'a> = match lines {
         // Rows that are read twice are put aside first: the request can only be read once.
@@ -774,13 +914,14 @@ fn respond_whole<'a>(
         Header::from_bytes("X-Report-Pages", stats.pages.to_string()).expect("ascii header"),
     ];
     // With its length, whatever its size: a client can then tell a whole document from one cut short.
-    Ok(Response::new(StatusCode(200), headers, Box::new(spool) as Box<dyn Read + Send>, Some(len as usize), None)
-        .with_chunked_threshold(usize::MAX))
+    let reply = Response::new(StatusCode(200), headers, Box::new(spool) as Box<dyn Read + Send>, Some(len as usize), None)
+        .with_chunked_threshold(usize::MAX);
+    Ok((reply, stats, len))
 }
 
 /// Renders on a thread of its own and answers with the document as it is produced. An error
 /// before the first bytes is answered as an error; one after them cuts the response short.
-fn respond_streaming(state: &Arc<State>, job: Job, rows: OwnedRows) -> Result<Streamed, Reply> {
+fn respond_streaming(state: &Arc<State>, job: Job, rows: OwnedRows) -> Result<Streamed, (u16, String)> {
     let (tx, rx) = std::sync::mpsc::sync_channel::<Piece>(8);
     let format = job.format;
     let shared = state.clone();
@@ -804,6 +945,7 @@ fn respond_streaming(state: &Arc<State>, job: Job, rows: OwnedRows) -> Result<St
                 m.renders_ok.fetch_add(1, Ordering::Relaxed);
                 m.pages.fetch_add(stats.pages as u64, Ordering::Relaxed);
                 m.rows.fetch_add(stats.rows as u64, Ordering::Relaxed);
+                let _ = tx.send(Piece::Done(stats));
             }
             Ok(Err((499, _))) => {
                 m.cancelled.fetch_add(1, Ordering::Relaxed);
@@ -821,12 +963,13 @@ fn respond_streaming(state: &Arc<State>, job: Job, rows: OwnedRows) -> Result<St
     });
     if spawned.is_err() {
         state.metrics.in_flight.fetch_sub(1, Ordering::Relaxed);
-        return Err(error(503, "cannot start another render now"));
+        return Err((503, "cannot start another render now".into()));
     }
     let first = match rx.recv() {
-        Ok(Piece::Failed(status, message)) => return Err(error(status, message)),
+        Ok(Piece::Failed(status, message)) => return Err((status, message)),
         Ok(Piece::Data(bytes)) => bytes,
-        Err(_) => Vec::new(),
+        // Not first: the last piece (empty or not) is always sent before it.
+        Ok(Piece::Done(_)) | Err(_) => Vec::new(),
     };
     state.metrics.streamed.fetch_add(1, Ordering::Relaxed);
     Ok(Streamed { format, first, rx })
@@ -834,15 +977,18 @@ fn respond_streaming(state: &Arc<State>, job: Job, rows: OwnedRows) -> Result<St
 
 fn handle(state: &Arc<State>, req: &mut Request) -> Outcome {
     let mut stream = None;
-    let reply = answer(state, req, &mut stream);
-    match stream {
-        Some(streamed) => Outcome::Stream(streamed),
-        None => Outcome::Reply(reply),
-    }
+    let mut notes = Notes::default();
+    let reply = answer(state, req, &mut stream, &mut notes);
+    let answer = match stream {
+        Some(streamed) => Answer::Stream(streamed),
+        None => Answer::Reply(reply),
+    };
+    Outcome { answer, notes }
 }
 
 /// Answers a request; a document to be sent while it renders is left in `stream` instead.
-fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) -> Reply {
+/// What the access log says about it goes in `notes`.
+fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>, notes: &mut Notes) -> Reply {
     let cfg = &state.cfg;
     let url = req.url().split('?').next().unwrap_or("").to_string();
     // Load balancers ask for /health without credentials; it says nothing but "ok".
@@ -852,7 +998,8 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
     if let (Some(per_minute), Some(client)) = (cfg.rate_limit, req.remote_addr().map(|a| a.ip())) {
         if let Err(wait) = state.limiter.allow(client, per_minute, Instant::now()) {
             state.metrics.rate_limited.fetch_add(1, Ordering::Relaxed);
-            return error(429, format!("too many requests: try again in {wait} s"))
+            return notes
+                .fail(429, format!("too many requests: try again in {wait} s"))
                 .with_header(Header::from_bytes("Retry-After", wait.to_string()).expect("ascii header"));
         }
     }
@@ -863,7 +1010,7 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
         });
         if !ok {
             state.metrics.unauthorized.fetch_add(1, Ordering::Relaxed);
-            return error(401, "missing or wrong bearer token");
+            return notes.fail(401, "missing or wrong bearer token");
         }
     }
     match (req.method(), url.as_str()) {
@@ -888,14 +1035,16 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
             let length = req.body_length();
             let query = req.url().split_once('?').map(|(_, q)| q.to_string()).unwrap_or_default();
             if !lines && length.is_some_and(|n| n > cfg.max_body) {
-                return error(413, "request body too large");
+                return notes.fail(413, "request body too large");
             }
             // Read what the request says it carries, not "until the connection ends": a client
             // that offers to switch protocols (Java's HttpClient offers HTTP/2 on every first
             // request) keeps the connection open, and waiting for its end would never return.
             let limit = match length {
                 Some(n) => n as u64,
-                None if header("Connection").contains("upgrade") => return error(411, "send a Content-Length with this request"),
+                None if header("Connection").contains("upgrade") => {
+                    return notes.fail(411, "send a Content-Length with this request")
+                }
                 None if lines => u64::MAX,
                 None => cfg.max_body as u64 + 1,
             };
@@ -907,19 +1056,20 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
                 reader.read_to_end(&mut head)
             };
             if read.is_err() {
-                return error(400, "cannot read request body");
+                return notes.fail(400, "cannot read request body");
             }
             if head.len() > cfg.max_body {
-                return error(413, if lines { "the first line of the request is too large" } else { "request body too large" });
+                return notes
+                    .fail(413, if lines { "the first line of the request is too large" } else { "request body too large" });
             }
             let body: serde_json::Value = match serde_json::from_slice(&head) {
                 Ok(v) => v,
-                Err(e) => return error(400, format!("invalid JSON: {e}")),
+                Err(e) => return notes.fail(400, format!("invalid JSON: {e}")),
             };
             drop(head);
             if path == "/inspect" {
                 let Some(t) = body.get("template").and_then(|v| v.as_str()) else {
-                    return error(400, "send `template`");
+                    return notes.fail(400, "send `template`");
                 };
                 return match ferroreport::parse(t) {
                     Ok(r) => json(
@@ -931,10 +1081,14 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
                             "warnings": r.warnings,
                         }),
                     ),
-                    Err(e) => error(422, e),
+                    Err(e) => notes.fail(422, e),
                 };
             }
             let name = path.strip_prefix("/render/").map(|n| n.trim_matches('/'));
+            notes.template = match name.or_else(|| body.get("templateName").and_then(|v| v.as_str())) {
+                Some(n) => Some(n.to_string()),
+                None => body.get("template").is_some_and(|t| t.is_string()).then(|| "inline".to_string()),
+            };
             // `format` in the body, or `?format=` in the URL; PDF by default.
             let requested = body
                 .get("format")
@@ -945,18 +1099,22 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
                 None => ferroreport::Format::Pdf,
                 Some(f) => match ferroreport::Format::parse(&f) {
                     Some(f) => f,
-                    None => return error(400, format!("unknown format `{f}` (pdf, xlsx, docx, pptx, ods, odt, csv or html)")),
+                    None => {
+                        return notes.fail(400, format!("unknown format `{f}` (pdf, xlsx, docx, pptx, ods, odt, csv or html)"))
+                    }
                 },
             };
+            notes.format = Some(format);
+            notes.streamed = streaming;
             let m = &state.metrics;
-            let refuse = |(status, message): (u16, String)| {
+            let refuse = |notes: &mut Notes, (status, message): (u16, String)| {
                 let counter = if status == 413 { &m.limited } else { &m.renders_failed };
                 counter.fetch_add(1, Ordering::Relaxed);
-                error(status, message)
+                notes.fail(status, message)
             };
             let mut job = match prepare(state, &body, name, format) {
                 Ok(job) => job,
-                Err(e) => return refuse(e),
+                Err(e) => return refuse(notes, e),
             };
             // Rows sent one per line are the report's rows, whatever its query.
             job.from_db &= !lines;
@@ -967,14 +1125,14 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
                     let mut spool = Spool::new(state.spool.clone(), "the request");
                     if let Err(e) = std::io::copy(&mut reader, &mut spool).and_then(|_| spool.rewind()) {
                         let status = if e.to_string().contains("--spool") { 507 } else { 400 };
-                        return refuse((status, e.to_string()));
+                        return refuse(notes, (status, e.to_string()));
                     }
                     OwnedRows::Lines(spool)
                 } else {
                     let empty = serde_json::Value::Array(Vec::new());
                     match ferroreport::data::records_from_json(&job.report, body.get("data").unwrap_or(&empty)) {
                         Ok(records) => OwnedRows::Records(records),
-                        Err(e) => return refuse(failed(e)),
+                        Err(e) => return refuse(notes, failed(e)),
                     }
                 };
                 return match respond_streaming(state, job, rows) {
@@ -982,7 +1140,7 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
                         *stream = Some(streamed);
                         json(200, serde_json::Value::Null)
                     }
-                    Err(reply) => reply,
+                    Err((status, message)) => notes.fail(status, message),
                 };
             }
             m.in_flight.fetch_add(1, Ordering::Relaxed);
@@ -992,11 +1150,15 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
             m.render_micros.fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
             m.durations.record(job.format, started.elapsed());
             match result {
-                Ok(reply) => reply,
-                Err(e) => refuse(e),
+                Ok((reply, stats, bytes)) => {
+                    notes.stats = Some(stats);
+                    notes.bytes = Some(bytes);
+                    reply
+                }
+                Err(e) => refuse(notes, e),
             }
         }
-        _ => error(404, "not found: use POST /render, POST /render/<name>, POST /inspect, GET /health or GET /metrics"),
+        _ => notes.fail(404, "not found: use POST /render, POST /render/<name>, POST /inspect, GET /health or GET /metrics"),
     }
 }
 
@@ -1056,29 +1218,47 @@ pub fn run(cfg: Config) -> Result<(), Box<dyn std::error::Error>> {
                 .stack_size(32 * 1024 * 1024)
                 .spawn(move || {
                     while let Ok(mut req) = server.recv() {
-                        // A bug must not take the worker down with it: answer 500 and go on.
                         let started = Instant::now();
-                        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handle(&state, &mut req)))
-                            .unwrap_or_else(|_| {
-                                state.metrics.panics.fetch_add(1, Ordering::Relaxed);
-                                Outcome::Reply(error(500, "internal error while rendering"))
-                            });
-                        if state.cfg.access_log {
-                            eprintln!(
-                                "{} {} {} {:.1}ms",
-                                req.method(),
-                                req.url().split('?').next().unwrap_or(""),
-                                outcome.status(),
-                                started.elapsed().as_secs_f64() * 1e3
+                        let mut entry = Entry {
+                            time: SystemTime::now(),
+                            id: request_id(
+                                req.headers().iter().find(|h| h.field.equiv("X-Request-Id")).map(|h| h.value.as_str()),
+                            ),
+                            method: req.method().to_string(),
+                            path: req.url().split('?').next().unwrap_or("").to_string(),
+                            status: 200,
+                            ms: 0.0,
+                        };
+                        // A bug must not take the worker down with it: answer 500 and go on.
+                        let Outcome { answer, mut notes } =
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handle(&state, &mut req))).unwrap_or_else(
+                                |_| {
+                                    state.metrics.panics.fetch_add(1, Ordering::Relaxed);
+                                    let mut notes = Notes::default();
+                                    Outcome { answer: Answer::Reply(notes.fail(500, "internal error while rendering")), notes }
+                                },
                             );
-                        }
-                        match outcome {
-                            Outcome::Reply(reply) => {
-                                drain(&mut req);
-                                let _ = req.respond(reply);
+                        let log = |entry: &mut Entry, notes: &Notes| {
+                            if let Some(format) = state.cfg.access_log {
+                                entry.ms = started.elapsed().as_secs_f64() * 1e3;
+                                eprintln!("{}", format.line(entry, notes));
                             }
-                            Outcome::Stream(streamed) => {
-                                streamed.send(req.into_writer());
+                        };
+                        match answer {
+                            Answer::Reply(reply) => {
+                                entry.status = reply.status_code().0;
+                                log(&mut entry, &notes);
+                                drain(&mut req);
+                                let id = Header::from_bytes("X-Request-Id", entry.id.as_str()).expect("ascii header");
+                                let _ = req.respond(reply.with_header(id));
+                            }
+                            // Logged when its stream ends, with what went out.
+                            Answer::Stream(streamed) => {
+                                let sent = streamed.send(req.into_writer(), &entry.id);
+                                notes.stats = sent.stats;
+                                notes.bytes = Some(sent.bytes);
+                                notes.error = sent.error;
+                                log(&mut entry, &notes);
                             }
                         }
                     }
@@ -1112,7 +1292,7 @@ mod tests {
     use super::*;
 
     /// What `Streamed::send` wrote, for a render that produced `pieces`.
-    fn sent(pieces: Vec<Piece>) -> (bool, String) {
+    fn sent(pieces: Vec<Piece>) -> (Sent, String) {
         #[derive(Clone, Default)]
         struct Wire(Arc<Mutex<Vec<u8>>>);
         impl Write for Wire {
@@ -1130,23 +1310,27 @@ mod tests {
         }
         drop(tx);
         let wire = Wire::default();
-        let whole = Streamed { format: ferroreport::Format::Csv, first: b"a,b\n".to_vec(), rx }.send(Box::new(wire.clone()));
+        let sent =
+            Streamed { format: ferroreport::Format::Csv, first: b"a,b\n".to_vec(), rx }.send(Box::new(wire.clone()), "r-1");
         let text = String::from_utf8(wire.0.lock().unwrap().clone()).unwrap();
-        (whole, text)
+        (sent, text)
     }
 
     #[test]
     fn a_streamed_document_ends_with_the_last_chunk_only_when_it_is_whole() {
-        let (whole, text) = sent(vec![Piece::Data(b"1,2\n".to_vec())]);
-        assert!(whole);
+        let stats = ferroreport::FillStats { pages: 1, rows: 1 };
+        let (done, text) = sent(vec![Piece::Data(b"1,2\n".to_vec()), Piece::Done(stats)]);
+        assert!(done.error.is_none() && done.bytes == 8 && done.stats.is_some_and(|s| s.pages == 1 && s.rows == 1));
         assert!(text.starts_with("HTTP/1.1 200 OK\r\n"), "{text}");
         assert!(text.contains("Transfer-Encoding: chunked\r\n") && text.contains("Preference-Applied: respond-streaming\r\n"));
+        assert!(text.contains("\r\nX-Request-Id: r-1\r\n"), "{text}");
         assert!(text.ends_with("\r\n\r\n4\r\na,b\n\r\n4\r\n1,2\n\r\n0\r\n\r\n"), "{text:?}");
 
         // A render that fails half way: no last chunk, and a line that is not a chunk size,
         // so that a client reports an error instead of a short document.
-        let (whole, text) = sent(vec![Piece::Data(b"1,2\n".to_vec()), Piece::Failed(422, "row 7\r\nis wrong".into())]);
-        assert!(!whole);
+        let (done, text) = sent(vec![Piece::Data(b"1,2\n".to_vec()), Piece::Failed(422, "row 7\r\nis wrong".into())]);
+        assert_eq!(done.error.as_deref(), Some("row 7\r\nis wrong"));
+        assert!(done.stats.is_none() && done.bytes == 8);
         assert!(text.ends_with("4\r\n1,2\n\r\nincomplete: row 7is wrong\r\n"), "{text:?}");
         assert!(!text.contains("0\r\n\r\n"));
     }
@@ -1205,7 +1389,7 @@ mod tests {
             limits: Default::default(),
             max_rows: None,
             cache: 0,
-            access_log: false,
+            access_log: None,
             allow_anonymous,
             rate_limit: None,
             spool_memory: 1 << 20,
@@ -1242,7 +1426,7 @@ mod tests {
             }
             let mut req: Request = req.into();
             let mut stream = None;
-            let reply = answer(&state, &mut req, &mut stream);
+            let reply = answer(&state, &mut req, &mut stream, &mut Notes::default());
             match stream {
                 Some(streamed) => (200, String::from_utf8_lossy(&streamed.first).into_owned()),
                 None => {
@@ -1334,6 +1518,68 @@ mod tests {
         ] {
             assert!(text.contains(&format!("# TYPE {kept} ")), "{kept}");
         }
+    }
+
+    #[test]
+    fn requests_keep_their_own_id_when_it_is_printable_and_short() {
+        assert_eq!(request_id(Some("abc-123")), "abc-123");
+        assert_eq!(request_id(Some("a b/c:{\"d\"}~")), "a b/c:{\"d\"}~");
+        let longest = "x".repeat(128);
+        assert_eq!(request_id(Some(&longest)), longest);
+        // Otherwise a new one: 32 hexadecimal digits, never twice the same.
+        let too_long = "x".repeat(129);
+        for bad in [None, Some(""), Some(too_long.as_str()), Some("año"), Some("a\tb"), Some("a\u{7f}")] {
+            let id = request_id(bad);
+            assert!(id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit()), "{bad:?}: {id}");
+        }
+        assert_ne!(request_id(None), request_id(None));
+    }
+
+    #[test]
+    fn an_access_log_line_is_one_json_object() {
+        let entry = Entry {
+            time: SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(1_795_000_000_123),
+            id: "r-\"1\"".into(),
+            method: "POST".into(),
+            path: "/render/invoice".into(),
+            status: 200,
+            ms: 12.34567,
+        };
+        let notes = Notes {
+            template: Some("invoice".into()),
+            format: Some(ferroreport::Format::Xlsx),
+            stats: Some(ferroreport::FillStats { pages: 3, rows: 40 }),
+            bytes: Some(5120),
+            streamed: true,
+            error: None,
+        };
+        let line = AccessLog::Json.line(&entry, &notes);
+        assert!(!line.contains('\n'), "{line}");
+        assert!(line.starts_with("{\"time\":\"2026-11-18T"), "{line}");
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "time": "2026-11-18T11:06:40.123Z", "request_id": "r-\"1\"", "method": "POST", "path": "/render/invoice",
+                "status": 200, "ms": 12.346, "template": "invoice", "format": "xlsx", "pages": 3, "rows": 40,
+                "bytes": 5120, "streamed": true,
+            })
+        );
+
+        // A request that did not render: only what is always there, and the error as sent.
+        let missing = Entry { path: "/nope".into(), status: 404, ..entry };
+        let notes = Notes { error: Some("bad \"x\"\nline two".into()), ..Notes::default() };
+        let line = AccessLog::Json.line(&missing, &notes);
+        assert!(!line.contains('\n'), "{line}");
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys, ["error", "method", "ms", "path", "request_id", "status", "time"]);
+        assert_eq!(v["error"], "bad \"x\"\nline two");
+
+        // Without json, the line it has always been.
+        assert_eq!(AccessLog::Text.line(&missing, &notes), "POST /nope 404 12.3ms");
+        assert_eq!(AccessLog::parse("json"), Some(AccessLog::Json));
+        assert_eq!(AccessLog::parse("yaml"), None);
     }
 
     #[test]

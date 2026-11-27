@@ -106,7 +106,11 @@ mitad del tamaño de un JRXML y accesible por defecto. Frente al propio JasperRe
   medida que el reporte las necesita: un millón de filas con el servidor en unos 50 MB. La
   respuesta es el documento completo o un error, nunca medio PDF; con
   `Prefer: respond-streaming` llega mientras se genera (primeros bytes al instante, y si el
-  cliente se va, el reporte se detiene).
+  cliente se va, el reporte se detiene). Toda respuesta lleva `X-Request-Id` (el del cliente o
+  uno nuevo), y `--access-log json` (o `FERROREPORT_ACCESS_LOG=json`) imprime una línea JSON
+  por petición para plataformas de logs: el ID, el estado y el tiempo, la plantilla, el formato,
+  las páginas, filas y bytes, y el error; nunca el token, el cuerpo ni los datos.
+  [Los campos](https://cristianencarnacion.github.io/ferroreport/es/docs.html#http-log).
 - **Java:** la dependencia `io.github.cristianencarnacion:ferroreport:1.3.0` de Maven Central
   (Java 11 o más nuevo, sin dependencias ni JasperReports) y
   `Ferroreport.local().template(Path.of("factura.jrxml")).rows(lineas).param("CLIENTE", "Caribe").render()`;
