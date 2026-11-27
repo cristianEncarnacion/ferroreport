@@ -457,7 +457,7 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>--max-pages &lt;n&gt;</code></td><td></td><td>Most pages a report may have. Default: no limit</td></tr>
         <tr><td><code>--max-rows &lt;n&gt;</code></td><td></td><td>Most rows a report may read, its subreports' and datasets' included. Default: no limit</td></tr>
         <tr><td><code>--cache &lt;n&gt;</code></td><td></td><td>Parsed templates kept in memory, so a template sent again is not parsed again. Default 128; <code>0</code> for none</td></tr>
-        <tr><td><code>--access-log</code></td><td></td><td>Prints a line per request: method, path, status and time</td></tr>
+        <tr><td><code>--access-log [json]</code></td><td><code>FERROREPORT_ACCESS_LOG=json|text</code></td><td>Prints a line per request to standard error: method, path, status and time. With <code>json</code>, one <a href="#http-log">JSON object per line</a> instead</td></tr>
         <tr><td><code>--spool-memory &lt;MB&gt;</code></td><td><code>FERROREPORT_SPOOL_MEMORY</code></td><td>How much of one document is kept in memory until it is complete; the rest goes to a file. Default 32</td></tr>
         <tr><td><code>--spool-dir &lt;dir&gt;</code></td><td><code>FERROREPORT_SPOOL_DIR</code></td><td>Where those files go. Default: the system's temporary directory (<code>/tmp</code> in the Docker image)</td></tr>
         <tr><td><code>--spool-disk &lt;MB&gt;</code></td><td><code>FERROREPORT_SPOOL_DISK</code></td><td>Disk all requests together may use for them. Default 4096</td></tr>
@@ -475,7 +475,7 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>POST /render</code></td><td>Renders the template sent in the request</td><td><code>application/pdf</code>, or the Excel or CSV file with <code>format</code></td></tr>
         <tr><td><code>POST /inspect</code></td><td>Reports a template's parameters, fields and unsupported features</td><td>JSON</td></tr>
         <tr><td><code>GET /health</code></td><td>For load balancers. Answers without the token</td><td><code>{"status": "ok", "version": "1.3.0"}</code></td></tr>
-        <tr><td><code>GET /metrics</code></td><td>Counters for Prometheus: renders, errors, renders stopped by a limit, renders stopped because the client left, documents sent as they rendered, time spent, pages, rows, bytes sent, template cache hits and misses, renders in flight, disk in use for documents</td><td>Prometheus text</td></tr>
+        <tr><td><code>GET /metrics</code></td><td>Counters for Prometheus: renders, errors, renders stopped by a limit, renders stopped because the client left, documents sent as they rendered, time spent, pages, rows, bytes sent, template cache hits and misses, renders in flight, disk in use for documents; render time by output format as a histogram (<code>ferroreport_render_duration_seconds</code>, with a <code>format</code> label and buckets from 5 ms to 60 s, for percentiles and alerts) and the version (<code>ferroreport_build_info</code>)</td><td>Prometheus text</td></tr>
       </table>
       <p>The request body is JSON:</p>
       <table>
@@ -501,6 +501,22 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
       <p>A document is sent only once it is complete, with its <code>Content-Length</code>: the answer is the whole document or an error,
         never part of one. It comes with two more headers: <code>Server-Timing</code> (milliseconds spent parsing the template, 0 when it
         came from the cache, and rendering) and <code>X-Report-Pages</code>.</p>
+      <p id="http-log">Every response, errors included, carries <code>X-Request-Id</code>: the one the request sent, when it is printable
+        ASCII of 128 characters or fewer, or a new one. With <code>--access-log json</code> (or <code>FERROREPORT_ACCESS_LOG=json</code>)
+        the server prints one JSON object per request to standard error, for Loki, CloudWatch, Datadog or ELK. A streamed document is
+        logged when its stream ends.</p>
+<pre data-lang="json">{"time":"2026-11-27T17:38:55.919Z","request_id":"client-abc-1","method":"POST","path":"/render/invoice","status":200,"ms":109.237,"template":"invoice","format":"pdf","pages":2,"rows":46,"bytes":47516,"streamed":false}
+{"time":"2026-11-27T17:38:56.046Z","request_id":"37bd0e0fe801f0520000000000000001","method":"POST","path":"/render/missing","status":404,"ms":0.25,"template":"missing","format":"pdf","streamed":false,"error":"template `missing` not found"}</pre>
+      <table>
+        <tr><th>Field</th><th>When</th><th>Meaning</th></tr>
+        <tr><td><code>time</code>, <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>ms</code></td><td>Always</td><td>When the request arrived (RFC 3339, UTC), its ID, the method, the path without the query, the status and the milliseconds it took</td></tr>
+        <tr><td><code>template</code>, <code>format</code>, <code>streamed</code></td><td>A render</td><td>The name for <code>/render/&lt;name&gt;</code> (or <code>templateName</code>), <code>inline</code> for a template in the body; the format; whether it was sent as it rendered</td></tr>
+        <tr><td><code>pages</code>, <code>rows</code>, <code>bytes</code></td><td>A render that finished</td><td>Pages and rows filled, bytes of the document sent (<code>bytes</code> also for a streamed document cut short)</td></tr>
+        <tr><td><code>error</code></td><td>An error</td><td>The message the client was sent, its first 300 characters</td></tr>
+      </table>
+      <p>The line never holds the token, the request body, parameter values or rows, except that an error message can quote the
+        value that could not be read. Without <code>json</code>, the line is the one
+        <code>--access-log</code> has always printed: <code>POST /render/invoice 200 109.2ms</code>.</p>
 <pre data-lang="shell"># curl
 curl -X POST localhost:8080/render/invoice \
   -H 'Authorization: Bearer change-me' -H 'Content-Type: application/json' \

@@ -1,0 +1,11 @@
+{
+ "Bank": "Northwind Savings Bank",
+ "BankAddress": "120 Harbor Street, Portsmouth · northwind.example",
+ "Holder": "Elena M. Duarte",
+ "HolderAddress": "48 Willow Lane, Apt 3B\nPortsmouth, NH 03801",
+ "Account": "NW 4421 0098 7731 0456",
+ "Currency": "USD",
+ "From": "2026-01-01",
+ "To": "2026-03-31",
+ "OpeningBalance": 2418.35
+}

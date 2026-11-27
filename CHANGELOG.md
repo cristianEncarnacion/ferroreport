@@ -6,6 +6,20 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 
 ## Unreleased
 
+- `ferroreport serve --access-log json` (or `FERROREPORT_ACCESS_LOG=json`) prints one JSON
+  object per request for log platforms: time, request ID, method, path, status, milliseconds;
+  for a render the template, format, pages, rows, bytes and whether it was streamed; on an error
+  the message the client was sent (its first 300 characters). Never the token, the body,
+  parameter values or rows, except that an error message can quote the value that could not be
+  read. Every response carries `X-Request-Id` (the request's own when it is printable ASCII of
+  128 characters or fewer, or a new one). `--access-log` alone prints the same line as before.
+  Streamed responses are now logged when the stream ends, so `ms` is the total time.
+- Tools: `tools/compat.py` lists what the output changes since a previous release (`--old 1.3.0`,
+  downloaded from GitHub Releases and checked against its `SHA256SUMS`, or `--old` a binary):
+  every fixture and example rendered by both, page counts, pixels (as `tools/compare.py`) and
+  CSV text compared, in `target/compat/report.md` with a diff picture of every page that
+  changed; `--strict` fails on any change. Pull requests run it against the latest release, for
+  the reviewer, without failing.
 - JasperReports' own samples measured again (`docs/samples*.json`, README): 76 of the 101
   comparable 7.1.1 templates come out the same (74 before) and 42 of the 88 6.20.6 ones (41
   before); the subreport MasterReport sample is the same in both, and the 7.1.1 thermometer
@@ -138,6 +152,12 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   render is a different picture (over 0.15% of its ink), listing each template with its worst
   page, or when the pages could not be compared (no `pdftoppm`). `--strict` and `same` do not
   change.
+- Server: `/metrics` adds `ferroreport_render_duration_seconds`, a histogram of render time
+  with a `format` label (buckets from 5 ms to 60 s), for percentiles and alerts, and
+  `ferroreport_build_info{version="..."}`. Every existing metric keeps its name and meaning.
+- Tests: the bank statement example is also a fixture (`fixtures/65-bank-statement`, in JRXML 6),
+  so CI keeps its page count and `tools/compare.py` compares it with JasperReports 6.20.6, which
+  renders it the same, pixel for pixel.
 
 ## 1.3.0
 

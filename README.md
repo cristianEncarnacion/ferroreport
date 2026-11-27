@@ -129,7 +129,12 @@ curl -X POST localhost:8080/render/invoice -H 'Authorization: Bearer change-me' 
 load balancers and `GET /metrics` for Prometheus. The server will not listen beyond localhost
 without a token (`FERROREPORT_TOKEN`), unless you say the port is private
 (`FERROREPORT_ALLOW_ANONYMOUS=1`); `--rate-limit` caps the requests per minute of one client. Templates are parsed once and cached, and every render runs under a time limit (60 s
-unless you change `--timeout`) and, if you set them, a page limit (`--max-pages`) and a row limit (`--max-rows`).
+unless you change `--timeout`) and, if you set them, a page limit (`--max-pages`) and a row limit (`--max-rows`). Every response
+carries `X-Request-Id` (the client's own, or a new one), and `--access-log json` (or
+`FERROREPORT_ACCESS_LOG=json`) prints one JSON line per request for log platforms: the request
+ID, status and time, the template, format, pages, rows and bytes, and the error. It never has
+the token, the body, parameter values or rows, except that an error message can quote the value
+that could not be read. [The fields](https://cristianencarnacion.github.io/ferroreport/docs.html#http-log).
 
 For reports with more rows than you want in memory, send them one per line
 (`Content-Type: application/x-ndjson`: the request on the first line, a row on each line after
