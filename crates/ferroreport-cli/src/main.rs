@@ -22,7 +22,7 @@ USAGE:
     ferroreport doctor <template.jrxml|template.ferro>
     ferroreport serve [OPTIONS]
     ferroreport convert <template> [-o <output>] [--to ferro|jrxml]
-    ferroreport migrate <folder|template...> [--report <file.md|file.json>] [--resources <folder>] [--strict] [--jasper <lib> [--keep <folder>]] [--to ferro|jrxml --out <folder>]
+    ferroreport migrate <folder|template...> [--report <file.md|file.json>] [--resources <folder>] [--strict] [--jasper <lib> [--keep <folder>] [--strict-pixels]] [--to ferro|jrxml --out <folder>]
 
 RENDER OPTIONS:
     -d, --data <file.json>      Rows: a JSON array of objects, or one JSON object per line
@@ -47,6 +47,8 @@ RENDER OPTIONS:
         --tagged                In PDF, say what the content is (tagged PDF) for screen readers:
                                 texts as paragraphs, images as figures, the rest as decoration
         --max-pages <n>         Stop if the report goes over this many pages
+        --max-rows <n>          Stop if the report reads more than this many rows (the rows
+                                of its subreports, tables, lists, charts and crosstabs too)
         --timeout <seconds>     Stop if the render takes longer than this
         --max-row <MB>          Stop at a row of data larger than this (default: 256)
     -w, --watch                 Render again whenever the template, its folder, the rows or the
@@ -105,7 +107,10 @@ MIGRATE:
     keeps both PDFs and CSVs of each, and the diff picture of each page that differs (red: only
     JasperReports, blue: only ferroreport). Nothing is written next to your templates.
     Exits with 1 when a template cannot be loaded; with --strict, also when one uses something
-    not supported yet, stops when rendered with no rows, or differs from JasperReports.
+    not supported yet, stops when rendered with no rows, or differs from JasperReports (pages,
+    texts and numbers). --strict-pixels (with --jasper) also exits with 1 when a page of a
+    template both engines render is a different picture, or when the pictures could not be
+    compared (no pdftoppm). A template one engine cannot render is left to --strict.
 
 CONVERT:
     Rewrites a template: JRXML (JasperReports 6 or 7) as a .ferro template, ferroreport's own
@@ -143,6 +148,8 @@ PowerPoint, OpenDocument, CSV or a web preview):
         --workers <n>           Requests rendered in parallel (default: CPU count)
         --timeout <seconds>     Longest a render may take (default: 60; 0 for no limit)
         --max-pages <n>         Most pages a report may have (default: no limit)
+        --max-rows <n>          Most rows a report may read, its subreports' and datasets'
+                                included (default: no limit)
         --cache <n>             Parsed templates kept in memory (default: 128; 0 for none)
         --access-log            Print a line per request
     GET /health answers without a token; GET /metrics gives counters for Prometheus.
@@ -544,6 +551,7 @@ fn migrate(args: &[String]) -> CliResult {
     let mut out_dir = None;
     let mut resources: Vec<PathBuf> = Vec::new();
     let mut strict = false;
+    let mut strict_pixels = false;
     let mut jasper: Option<PathBuf> = None;
     let mut keep: Option<PathBuf> = None;
     let mut it = args.iter();
@@ -554,6 +562,7 @@ fn migrate(args: &[String]) -> CliResult {
             "--out" => out_dir = it.next().cloned(),
             "--resources" => resources.push(it.next().ok_or("--resources needs a folder")?.into()),
             "--strict" => strict = true,
+            "--strict-pixels" => strict_pixels = true,
             "--jasper" => jasper = Some(it.next().ok_or("--jasper needs the folder of the JasperReports jars")?.into()),
             "--keep" => keep = Some(it.next().ok_or("--keep needs a folder")?.into()),
             s if s.starts_with('-') => return Err(format!("unknown option {s}").into()),
@@ -562,6 +571,9 @@ fn migrate(args: &[String]) -> CliResult {
     }
     if inputs.is_empty() {
         return Err("migrate needs a folder or templates: ferroreport migrate reports/".into());
+    }
+    if strict_pixels && jasper.is_none() {
+        return Err("--strict-pixels compares pages with JasperReports': it needs --jasper <lib>".into());
     }
     if to.is_some() != out_dir.is_some() {
         return Err("--to and --out go together: ferroreport migrate reports/ --to ferro --out converted/".into());
@@ -845,7 +857,50 @@ fn migrate(args: &[String]) -> CliResult {
         )
         .into());
     }
+    if strict_pixels {
+        let checked: Vec<(&str, &Compared)> =
+            results.iter().filter_map(|r| Some((r.path.as_str(), r.jasper.as_ref()?))).collect();
+        strict_pixels_check(&checked)?;
+    }
     Ok(())
+}
+
+/// What `--strict-pixels` says of the templates compared with JasperReports: `Err` with the
+/// templates whose pages are a different picture (each with its worst page and share), or with
+/// why the pictures could not be compared. A template either engine could not render is left
+/// to the other checks.
+fn strict_pixels_check(compared: &[(&str, &Compared)]) -> Result<(), String> {
+    let rendered = || compared.iter().filter(|(_, c)| c.jasper_error.is_none() && c.ours_error.is_none());
+    let not_compared: Vec<String> = rendered()
+        .filter(|(_, c)| c.pictures.is_none())
+        .map(|(path, c)| format!("{path}: {}", c.pictures_note.as_deref().unwrap_or("not compared")))
+        .collect();
+    if !not_compared.is_empty() {
+        return Err(format!(
+            "--strict-pixels: the pages of {} template(s) could not be compared pixel by pixel (pdftoppm, from poppler, must be on the PATH):\n  {}",
+            not_compared.len(),
+            not_compared.join("\n  ")
+        ));
+    }
+    let differing: Vec<String> = rendered()
+        .filter_map(|(path, c)| {
+            let p = c.pictures.as_ref()?;
+            (p.pages_differing > 0).then(|| {
+                let page = p.worst_page.map_or(String::new(), |n| format!("page {n}, "));
+                format!("{path}: {} page(s) differ; the worst, {page}{:.2}% of its ink", p.pages_differing, p.worst_share * 100.0)
+            })
+        })
+        .collect();
+    if differing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "--strict-pixels: {} template(s) have pages that are a different picture (over {:.2}% of a page's ink):\n  {}",
+            differing.len(),
+            pixels::MATCH_THRESHOLD * 100.0,
+            differing.join("\n  ")
+        ))
+    }
 }
 
 /// The MIME type of an attached file, by its extension.
@@ -933,6 +988,7 @@ fn render(args: &[String]) -> CliResult {
     let mut permissions: Option<String> = None;
     let mut attachments = Vec::new();
     let mut limits = ferroreport::Limits::default();
+    let mut max_rows = None;
     let mut db = std::env::var("FERROREPORT_DB").ok().filter(|u| !u.is_empty());
     let mut sign = SignOptions::default();
     let mut it = args.iter();
@@ -962,6 +1018,7 @@ fn render(args: &[String]) -> CliResult {
                 max_row = (mb.max(0.001) * 1048576.0) as usize;
             }
             "--max-pages" => limits.max_pages = Some(value(a)?.parse().map_err(|_| "--max-pages expects a number")?),
+            "--max-rows" => max_rows = Some(value(a)?.parse().map_err(|_| "--max-rows expects a number")?),
             "--timeout" => {
                 let secs: f64 = value(a)?.parse().map_err(|_| "--timeout expects seconds")?;
                 limits.timeout = Some(std::time::Duration::from_secs_f64(secs.max(0.0)));
@@ -1002,6 +1059,7 @@ fn render(args: &[String]) -> CliResult {
         .locale(&locale)
         .resource_dir(template_dir)
         .limits(limits)
+        .max_rows(max_rows)
         .xlsx_options(ferroreport::xlsx::XlsxOptions { detect_cell_type: xlsx_numbers })
         .tagged(tagged)
         .pdfa(pdfa)
@@ -1169,7 +1227,7 @@ fn watch(args: &[String]) -> CliResult {
         match a.as_str() {
             "-d" | "--data" | "-p" | "--params" | "-r" | "--resources" => watched.extend(it.next().map(PathBuf::from)),
             "-o" | "--output" | "-f" | "--format" | "-l" | "--locale" | "--font" | "--font-set" | "--now" | "--db" | "--pdfa"
-            | "--attach" | "--max-row" | "--max-pages" | "--timeout" | "--user-password" | "--owner-password"
+            | "--attach" | "--max-row" | "--max-pages" | "--max-rows" | "--timeout" | "--user-password" | "--owner-password"
             | "--permissions" => {
                 it.next();
             }
@@ -1290,6 +1348,7 @@ fn serve(args: &[String]) -> CliResult {
     let mut workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
     // A request that runs for a minute is almost always a mistake or an attack.
     let mut limits = ferroreport::Limits { max_pages: None, timeout: Some(std::time::Duration::from_secs(60)) };
+    let mut max_rows = None;
     let mut cache = 128usize;
     let mut access_log = false;
     let mut allow_anonymous = std::env::var("FERROREPORT_ALLOW_ANONYMOUS").is_ok_and(|v| !v.is_empty() && v != "0");
@@ -1315,6 +1374,7 @@ fn serve(args: &[String]) -> CliResult {
             "--max-body" => max_body_mb = value(a)?.parse().map_err(|_| "--max-body expects megabytes")?,
             "--workers" => workers = value(a)?.parse().map_err(|_| "--workers expects a number")?,
             "--max-pages" => limits.max_pages = Some(value(a)?.parse().map_err(|_| "--max-pages expects a number")?),
+            "--max-rows" => max_rows = Some(value(a)?.parse().map_err(|_| "--max-rows expects a number")?),
             "--timeout" => {
                 let secs: f64 = value(a)?.parse().map_err(|_| "--timeout expects seconds (0 for none)")?;
                 limits.timeout = (secs > 0.0).then(|| std::time::Duration::from_secs_f64(secs));
@@ -1338,6 +1398,7 @@ fn serve(args: &[String]) -> CliResult {
         max_body: max_body_mb * 1024 * 1024,
         workers,
         limits,
+        max_rows,
         cache,
         access_log,
         allow_anonymous,
@@ -1452,4 +1513,61 @@ fn doctor(args: &[String]) -> CliResult {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn compared(pictures: Option<pixels::Pictures>, note: Option<&str>) -> Compared {
+        Compared {
+            jasper_error: None,
+            ours_error: None,
+            jasper_pages: 1,
+            ours_pages: 1,
+            jasper_ms: 0.0,
+            ours_ms: 0.0,
+            csv_diff: (0, 1),
+            rows: None,
+            pictures,
+            pictures_note: note.map(str::to_string),
+        }
+    }
+
+    fn pictures(pages_differing: usize, worst_page: usize, worst_share: f64) -> pixels::Pictures {
+        pixels::Pictures { worst_page: Some(worst_page), worst_share, pages_differing, diff_files: Vec::new() }
+    }
+
+    #[test]
+    fn strict_pixels_passes_when_every_page_is_the_same_picture() {
+        let same = compared(Some(pictures(0, 1, 0.001)), None);
+        assert_eq!(strict_pixels_check(&[("a.jrxml", &same), ("b.jrxml", &same)]), Ok(()));
+        assert_eq!(strict_pixels_check(&[]), Ok(()));
+    }
+
+    #[test]
+    fn strict_pixels_lists_the_templates_whose_pages_differ() {
+        let same = compared(Some(pictures(0, 1, 0.0)), None);
+        let differs = compared(Some(pictures(2, 3, 0.0244)), None);
+        let err = strict_pixels_check(&[("same.jrxml", &same), ("invoice.jrxml", &differs)]).unwrap_err();
+        assert!(err.contains("1 template(s)"), "{err}");
+        assert!(err.contains("invoice.jrxml: 2 page(s) differ; the worst, page 3, 2.44% of its ink"), "{err}");
+        assert!(!err.contains("same.jrxml"), "{err}");
+    }
+
+    #[test]
+    fn strict_pixels_fails_when_the_pictures_could_not_be_compared() {
+        let unchecked = compared(None, Some("pdftoppm is not on the PATH"));
+        let err = strict_pixels_check(&[("a.jrxml", &unchecked)]).unwrap_err();
+        assert!(err.contains("could not be compared") && err.contains("pdftoppm is not on the PATH"), "{err}");
+    }
+
+    #[test]
+    fn strict_pixels_leaves_templates_an_engine_could_not_render_to_the_other_checks() {
+        let mut failed = compared(None, None);
+        failed.jasper_error = Some("JRException".into());
+        let mut ours = compared(None, None);
+        ours.ours_error = Some("unsupported".into());
+        assert_eq!(strict_pixels_check(&[("a.jrxml", &failed), ("b.jrxml", &ours)]), Ok(()));
+    }
 }

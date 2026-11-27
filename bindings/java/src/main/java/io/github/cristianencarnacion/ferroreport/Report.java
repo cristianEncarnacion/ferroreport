@@ -45,6 +45,7 @@ public final class Report {
     private String locale = "en_US";
     private Format format;
     private Integer maxPages;
+    private Integer maxRows;
     private Duration timeout;
     private LocalDateTime now;
     private boolean csvSafe;
@@ -118,6 +119,16 @@ public final class Report {
     /** Stops with a {@link FerroreportException} if the report goes over this many pages (local engine). */
     public Report maxPages(int pages) {
         this.maxPages = pages;
+        return this;
+    }
+
+    /**
+     * Stops with a {@link FerroreportException} if the report reads more than this many rows, those of
+     * its subreports, tables, lists, charts and crosstabs included (local engine). A report that reads
+     * many rows but prints few pages, such as a summary of totals, stops here and not at {@link #maxPages}.
+     */
+    public Report maxRows(int rows) {
+        this.maxRows = rows;
         return this;
     }
 
@@ -272,6 +283,10 @@ public final class Report {
             if (maxPages != null) {
                 cmd.add("--max-pages");
                 cmd.add(maxPages.toString());
+            }
+            if (maxRows != null) {
+                cmd.add("--max-rows");
+                cmd.add(maxRows.toString());
             }
             if (timeout != null) {
                 cmd.add("--timeout");

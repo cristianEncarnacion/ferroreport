@@ -147,6 +147,7 @@ def render(
     now: Optional[_dt.datetime] = None,
     format: str = "pdf",
     max_pages: Optional[int] = None,
+    max_rows: Optional[int] = None,
     timeout: Optional[float] = None,
     csv_safe: bool = False,
     tagged: bool = False,
@@ -175,9 +176,10 @@ def render(
     format: "pdf", "xlsx", "docx" (Word), "pptx" (PowerPoint, a slide per page), "ods" or
         "odt" (OpenDocument spreadsheet or text), "csv" or "html" (a web page that looks like
         the PDF, for previews).
-    max_pages, timeout: stop with FerroreportError if the report goes over this many pages
-        or takes longer than this many seconds. Set them when templates or data come from
-        other people.
+    max_pages, max_rows, timeout: stop with FerroreportError if the report goes over this
+        many pages, reads more than this many rows (those of its subreports, tables, lists,
+        charts and crosstabs count too) or takes longer than this many seconds. Set them when
+        templates or data come from other people.
     csv_safe: in CSV, put an apostrophe before values a spreadsheet would run as a formula.
     tagged: in PDF, say what the content is (tagged PDF), for screen readers.
     pdfa: write PDF/A, for archiving: "2b", "2u", "2a", "3b", "3u" or "3a" (level a is also
@@ -213,6 +215,7 @@ def render(
             password=password,
             owner_password=owner_password,
             permissions=_permissions(permissions),
+            max_rows=max_rows,
         )[0]
     except ValueError as e:
         raise FerroreportError(str(e)) from None
@@ -234,6 +237,7 @@ def render_to_file(
     now: Optional[_dt.datetime] = None,
     format: Optional[str] = None,
     max_pages: Optional[int] = None,
+    max_rows: Optional[int] = None,
     timeout: Optional[float] = None,
     csv_safe: bool = False,
     tagged: bool = False,
@@ -286,6 +290,7 @@ def render_to_file(
             password=password,
             owner_password=owner_password,
             permissions=_permissions(permissions),
+            max_rows=max_rows,
         )
     except ValueError as e:
         raise FerroreportError(str(e)) from None

@@ -368,7 +368,11 @@ fn break_paragraph(
         }
         pos = unit_end;
     }
-    push(lines, line_start, paragraph.len().max(line_start));
+    // What is left is the last line (an empty paragraph is one empty line). A last word broken
+    // between characters to its end, each one wider than the line, leaves nothing.
+    if line_start < paragraph.len() || line_start == 0 {
+        push(lines, line_start, paragraph.len());
+    }
 }
 
 /// Vertical metrics of a block of text in a given font and line spacing.
@@ -494,6 +498,10 @@ mod tests {
         assert_eq!(lines.len(), 3);
         let lines = break_lines("a\n\nb", f, 10.0, 100.0, Measure::Render);
         assert_eq!(lines.len(), 3);
+        // Narrower than any character: one a line, as Java's LineBreakMeasurer gives them, and
+        // no empty line after them.
+        let lines = break_lines("Ab", f, 10.0, 2.0, Measure::Fill);
+        assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["A", "b"]);
     }
 
     #[test]

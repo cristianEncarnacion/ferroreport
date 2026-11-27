@@ -40,6 +40,8 @@ pub struct Config {
     pub workers: usize,
     /// Limits every render runs under.
     pub limits: ferroreport::Limits,
+    /// Most rows a render may read (`--max-rows`).
+    pub max_rows: Option<usize>,
     /// Parsed templates kept (0 turns the cache off).
     pub cache: usize,
     /// Print a line per request to standard error.
@@ -183,7 +185,7 @@ impl Metrics {
         line(
             "ferroreport_render_limited_total",
             "counter",
-            "Renders stopped by a page or time limit.",
+            "Renders stopped by a page, row or time limit.",
             g(&self.limited).to_string(),
         );
         line(
@@ -302,6 +304,7 @@ struct Job {
     encryption: Option<ferroreport::crypt::Encryption>,
     xlsx_numbers: bool,
     limits: ferroreport::Limits,
+    max_rows: Option<usize>,
     params: serde_json::Value,
     format: ferroreport::Format,
     /// The database, for a template from the templates directory.
@@ -451,6 +454,7 @@ fn prepare(
         },
         xlsx_numbers: flag("xlsxNumbers"),
         limits: cfg.limits,
+        max_rows: cfg.max_rows,
         params,
         format,
         connection,
@@ -475,6 +479,7 @@ impl Job {
         let mut r = Renderer::new()
             .locale(&self.locale)
             .limits(self.limits)
+            .max_rows(self.max_rows)
             .tagged(self.tagged)
             .pdfa(self.pdfa)
             .encrypt(self.encryption.clone())
@@ -1148,6 +1153,7 @@ mod tests {
             max_body: 1 << 20,
             workers: 1,
             limits: Default::default(),
+            max_rows: None,
             cache: 0,
             access_log: false,
             allow_anonymous,
@@ -1158,6 +1164,58 @@ mod tests {
             connection: None,
             signature: None,
         }
+    }
+
+    #[test]
+    fn a_report_that_reads_too_many_rows_is_answered_413_and_counted() {
+        let mut cfg = config("127.0.0.1:0", None, false);
+        cfg.max_rows = Some(10);
+        let state = Arc::new(State {
+            cache: TemplateCache::new(0),
+            metrics: Metrics::default(),
+            limiter: RateLimiter::default(),
+            spool: Arc::new(SpoolLimits::new(cfg.spool_memory, None, cfg.spool_disk)),
+            cfg,
+        });
+        // Only a total: one page however many rows, sent one per line.
+        let template = r#"<jasperReport name="total" pageWidth="200" pageHeight="100" columnWidth="200" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0"><field name="n" class="java.lang.Integer"/><summary><band height="20"><textField><reportElement x="0" y="0" width="200" height="20"/><textFieldExpression><![CDATA["rows " + $V{REPORT_COUNT}]]></textFieldExpression></textField></band></summary></jasperReport>"#;
+        let request = |rows: usize, more: &[(&str, &str)]| {
+            let head = serde_json::json!({ "template": template, "format": "csv" }).to_string();
+            let body = std::iter::once(head).chain((0..rows).map(|n| format!("{{\"n\": {n}}}"))).collect::<Vec<_>>().join("\n");
+            let mut req = tiny_http::TestRequest::new()
+                .with_method(Method::Post)
+                .with_path("/render")
+                .with_header(Header::from_bytes("Content-Type", "application/x-ndjson").unwrap())
+                .with_body(Box::leak(body.into_boxed_str()));
+            for (name, value) in more {
+                req = req.with_header(Header::from_bytes(*name, *value).unwrap());
+            }
+            let mut req: Request = req.into();
+            let mut stream = None;
+            let reply = answer(&state, &mut req, &mut stream);
+            match stream {
+                Some(streamed) => (200, String::from_utf8_lossy(&streamed.first).into_owned()),
+                None => {
+                    let status = reply.status_code().0;
+                    let mut text = Vec::new();
+                    reply.raw_print(&mut text, tiny_http::HTTPVersion(1, 1), &[], false, None).unwrap();
+                    (status, String::from_utf8_lossy(&text).into_owned())
+                }
+            }
+        };
+        let (status, text) = request(10, &[]);
+        assert_eq!(status, 200, "{text}");
+        assert!(text.ends_with("rows 10\n"), "{text}");
+        let (status, text) = request(50, &[]);
+        assert_eq!(status, 413, "{text}");
+        assert!(text.contains("the report reads more than 10 rows"), "{text}");
+        // The same when the document is sent as it renders: the limit is reached before any of it.
+        let (status, text) = request(50, &[("Prefer", "respond-streaming")]);
+        assert_eq!(status, 413, "{text}");
+        let metrics = state.metrics.text(&state.spool);
+        assert!(metrics.contains("\nferroreport_render_limited_total 2\n"), "{metrics}");
+        assert!(metrics.contains("\nferroreport_render_errors_total 0\n"), "{metrics}");
+        assert!(metrics.contains("\nferroreport_renders_total 1\n"), "{metrics}");
     }
 
     #[test]

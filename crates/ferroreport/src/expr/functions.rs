@@ -437,13 +437,18 @@ pub fn call(name: &str, args: Vec<Value>, env: &EvalEnv) -> Result<Value> {
             // DateTimeFormatter.ofLocalizedTime(FormatStyle.LONG) when no pattern is given.
             let pattern = match text(&a(3)) {
                 Some(p) => p,
-                None if env.locale.tag == "es_DO" => "h:mm:ss\u{202F}a z".to_string(),
-                None if env.locale.tag == "es_MX" => "HH:mm:ss z".to_string(),
-                None if matches!(env.locale.tag, "fr" | "fr_FR" | "fr_BE" | "fr_CH") => "HH:mm:ss z".to_string(),
+                None if matches!(env.locale.tag, "es_DO" | "es_CO" | "es_VE" | "es_PH" | "es_PA" | "es_PR" | "es_US") => {
+                    "h:mm:ss\u{202F}a z".to_string()
+                }
+                None if matches!(env.locale.tag, "es" | "es_ES" | "es_EA" | "es_IC" | "es_GQ") => "H:mm:ss z".to_string(),
+                // es_MX, es_419, es_AR and the other Spanish-speaking countries.
+                None if env.locale.tag.starts_with("es") => "HH:mm:ss z".to_string(),
                 None if env.locale.tag == "fr_CA" => "HH 'h' mm 'min' ss 's' z".to_string(),
-                None if env.locale.tag == "es_419" => "HH:mm:ss z".to_string(),
+                None if matches!(env.locale.tag, "fr_DJ" | "fr_DZ" | "fr_MR" | "fr_SY" | "fr_TD" | "fr_TN" | "fr_VU") => {
+                    "h:mm:ss\u{202F}a z".to_string()
+                }
+                None if env.locale.tag == "fr" || env.locale.tag.starts_with("fr_") => "HH:mm:ss z".to_string(),
                 None if ["pt", "it", "de"].iter().any(|p| env.locale.tag.starts_with(p)) => "HH:mm:ss z".to_string(),
-                None if env.locale.tag.starts_with("es") => "H:mm:ss z".to_string(),
                 None => "h:mm:ss\u{202F}a z".to_string(),
             };
             date_format(name, &at, &pattern, env.locale)
@@ -673,7 +678,14 @@ fn parse_prefix(text: &str) -> Option<NaiveDateTime> {
 /// `Calendar.getInstance(locale).getFirstDayOfWeek()` says (JasperReports' RelativeDateRange).
 fn first_day_of_week(locale: &Locale) -> u32 {
     match locale.tag {
-        "es_ES" | "fr_FR" | "fr_BE" | "fr_CH" | "it_IT" | "it_CH" | "de_DE" | "de_AT" | "de_CH" => 1,
+        "es_ES" | "es_EA" | "es_IC" | "es_GQ" | "es_AR" | "es_EC" | "es_CL" | "es_UY" | "es_BO" | "es_CR" | "es_CU"
+        | "es_419" => 1,
+        "it_IT" | "it_CH" | "de_DE" | "de_AT" | "de_CH" => 1,
+        // French without a country and in Canada start on Sunday, in Algeria, Djibouti and Syria
+        // on Saturday, everywhere else on Monday.
+        "fr_CA" => 0,
+        "fr_DZ" | "fr_DJ" | "fr_SY" => 6,
+        t if t.starts_with("fr_") => 1,
         _ => 0,
     }
 }

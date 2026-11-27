@@ -218,6 +218,18 @@ public class FerroreportTest {
         }
         assertThrows(FerroreportException.class, () -> engine.template(template).rows(endless).timeout(Duration.ofMillis(1)).render());
 
+        // A report that only prints a total: one page however many rows, stopped by the row limit.
+        String total = "<jasperReport name=\"total\" pageWidth=\"200\" pageHeight=\"100\" columnWidth=\"200\" leftMargin=\"0\" rightMargin=\"0\" topMargin=\"0\" bottomMargin=\"0\">"
+            + "<field name=\"id\" class=\"java.lang.Integer\"/><summary><band height=\"20\"><textField><reportElement x=\"0\" y=\"0\" width=\"200\" height=\"20\"/>"
+            + "<textFieldExpression><![CDATA[\"rows \" + $V{REPORT_COUNT}]]></textFieldExpression></textField></band></summary></jasperReport>";
+        made.set(0);
+        FerroreportException tooMany = assertThrows(FerroreportException.class, () -> engine.source(total).rows(endless).maxRows(1000).maxPages(1).render());
+        assertTrue(tooMany.getMessage(), tooMany.getMessage().contains("reads more than 1000 rows"));
+        assertTrue("rows made: " + made.get(), made.get() < 200_000);
+        Iterable<Map<String, Object>> thousand = () -> java.util.stream.IntStream.range(0, 1000).mapToObj(i -> Map.<String, Object>of("id", i)).iterator();
+        String counted = new String(engine.source(total).rows(thousand).maxRows(1000).format(Format.CSV).render(), StandardCharsets.UTF_8);
+        assertEquals("rows 1000", counted.trim());
+
         // 60,000 rows from a lazy source, as CSV: one line per row plus headers.
         Iterable<Map<String, Object>> many = () -> new Iterator<>() {
             int i = 0;
@@ -293,7 +305,7 @@ public class FerroreportTest {
         try (java.net.ServerSocket probe = new java.net.ServerSocket(0)) {
             port = probe.getLocalPort();
         }
-        Process server = new ProcessBuilder(bin, "serve", "--port", String.valueOf(port), "--token", "s3cret", "--templates", FIXTURES.resolve("02-invoice").toString())
+        Process server = new ProcessBuilder(bin, "serve", "--port", String.valueOf(port), "--token", "s3cret", "--templates", FIXTURES.resolve("02-invoice").toString(), "--max-rows", "200000")
             .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
         try {
             Ferroreport remote = Ferroreport.server(URI.create("http://127.0.0.1:" + port + "/"), "s3cret");
@@ -333,6 +345,9 @@ public class FerroreportTest {
             };
             remote.template(large).rows(people(200_000, -1)).format(Format.CSV).renderTo(counting);
             assertTrue("lines: " + lines[0], lines[0] > 200_000);
+            // One row more than the server's --max-rows: its limit, answered before the document.
+            FerroreportException tooMany = assertThrows(FerroreportException.class, () -> remote.template(large).rows(people(200_001, -1)).format(Format.CSV).render());
+            assertTrue(tooMany.getMessage(), tooMany.getMessage().contains("reads more than 200000 rows"));
             // Rows that stop half way: the error is the rows', and no document comes back.
             FerroreportException broken = assertThrows(FerroreportException.class, () -> remote.template(large).rows(people(200_000, 50_000)).render());
             assertTrue(broken.getMessage(), broken.getMessage().contains("cannot read the rows: row 50000 failed"));

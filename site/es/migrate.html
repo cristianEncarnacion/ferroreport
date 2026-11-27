@@ -128,6 +128,9 @@ report written to migration.md</pre>
           lo mismo en JSON, con los elementos que usa cada una.</li>
         <li><code>--strict</code> hace que el comando falle si una plantilla usa algo aún no soportado, se detiene al generarla sin filas o
           difiere de JasperReports; sin esa opción, solo falla si una plantilla no carga. Úsalo en CI cuando la carpeta ya pase.</li>
+        <li><code>--strict-pixels</code> (con <code>--jasper</code>) también lo hace fallar cuando una página se ve distinta a la de JasperReports (más
+          del 0,15% de su tinta, comparada píxel por píxel), o cuando las páginas no se pudieron comparar porque <code>pdftoppm</code> no está en el PATH.
+          Agrégalo, junto a <code>--strict</code>, cuando tus plantillas ya coincidan píxel por píxel y quieras que CI lo mantenga.</li>
         <li><code>--to ferro --out convertidas/</code> (o <code>--to jrxml</code>) escribe además cada plantilla convertida, en las mismas
           carpetas. No hace falta para migrar: ferroreport genera el JRXML tal cual.</li>
         <li>Para una sola plantilla, <code>ferroreport doctor factura.jrxml</code> lista lo que usa y si cada parte está soportada.</li>
@@ -189,8 +192,8 @@ reports.template(Path.of("reportes/ventas.jrxml"))
         <li><code>.param(nombre, valor)</code> y <code>.params(Map)</code> reciben los parámetros. <code>BigDecimal</code> conserva todos sus
           dígitos; <code>LocalDate</code>, <code>LocalDateTime</code>, <code>java.util.Date</code> y las fechas de <code>java.sql</code> se
           vuelven fechas; y <code>byte[]</code> se vuelve imagen. <code>REPORT_LOCALE</code> pasa a ser <code>.locale("es_DO")</code>: los
-          formatos de números y fechas siguen en_US, es_DO, es_MX, es_ES, francés (fr, fr_FR, fr_BE, fr_CA, fr_CH), portugués (pt, pt_BR, pt_PT), italiano (it, it_IT, it_CH) y alemán (de, de_DE, de_AT, de_CH) por ahora.</li>
-        <li><code>.maxPages(n)</code> y <code>.timeout(Duration)</code> detienen un reporte que crece más de lo esperado.</li>
+          formatos de números y fechas siguen en_US, español (es, es_ES, es_DO, es_MX, es_AR, es_CO, es_CL, es_PE y los otros países hispanohablantes), francés (fr, fr_FR, fr_BE, fr_CA, fr_CH, fr_LU, fr_MA, fr_SN y las otras regiones francesas), portugués (pt, pt_BR, pt_PT), italiano (it, it_IT, it_CH) y alemán (de, de_DE, de_AT, de_CH) por ahora.</li>
+        <li><code>.maxPages(n)</code>, <code>.maxRows(n)</code> y <code>.timeout(Duration)</code> detienen un reporte que crece más de lo esperado.</li>
         <li><code>Ferroreport.local()</code> ejecuta el motor nativo como un proceso hijo por reporte: el que indique
           <code>-Dferroreport.bin</code> o <code>FERROREPORT_BIN</code>, si no <code>ferroreport</code> en el <code>PATH</code>, y si no una copia
           que descarga una vez del release de GitHub con la versión de la librería y verifica con su lista SHA-256. En un contenedor, copia el

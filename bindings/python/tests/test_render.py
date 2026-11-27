@@ -109,6 +109,11 @@ def test_limits_and_csv_guard(tmp_path):
         ferroreport.render(fx / "report.jrxml", rows, max_pages=2)
     with pytest.raises(ferroreport.FerroreportError, match="longer than"):
         ferroreport.render(fx / "report.jrxml", rows, timeout=1e-9)
+    with pytest.raises(ferroreport.FerroreportError, match="reads more than 100 rows"):
+        ferroreport.render(fx / "report.jrxml", rows, max_rows=100)
+    with pytest.raises(ferroreport.FerroreportError, match="reads more than 100 rows"):
+        ferroreport.render_to_file(fx / "report.jrxml", tmp_path / "x.csv", rows, max_rows=100)
+    assert ferroreport.render(fx / "report.jrxml", rows, max_rows=190).startswith(b"%PDF")
     with pytest.raises(ferroreport.FerroreportError):
         ferroreport.render_to_file(fx / "report.jrxml", tmp_path / "x.pdf", rows, max_pages=2)
     assert not list(tmp_path.iterdir())

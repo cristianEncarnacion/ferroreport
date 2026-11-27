@@ -32,6 +32,7 @@ pub mod fonts;
 pub mod format;
 mod grid;
 pub mod html;
+mod iconlabel;
 pub mod image;
 pub mod jrxml;
 pub mod model;
@@ -200,6 +201,16 @@ impl Renderer {
     /// Stops a render that goes over `limits` (pages, time) with [`Error::Limit`].
     pub fn limits(mut self, limits: Limits) -> Renderer {
         self.limits = limits;
+        self
+    }
+
+    /// Stops a render that reads more than `rows` rows with [`Error::Limit`], as soon as it
+    /// reads one more: a report that reads many rows but prints few pages (a summary of
+    /// totals, a chart over a large data set) stops before it has read them all. Every row
+    /// counts: the report's own and those of its subreports, tables, lists, charts and
+    /// crosstabs. `None` (the default) sets no limit.
+    pub fn max_rows(mut self, rows: Option<usize>) -> Renderer {
+        self.images.max_rows = rows;
         self
     }
 

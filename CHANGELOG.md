@@ -13,6 +13,49 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 - Speed: Word, Excel, ODS, ODT, PowerPoint, CSV and tagged PDF exports no longer break each plain
   text into lines twice: the text a cell keeps is cut from the lines laid out for drawing (20,000
   rows of 09-large to DOCX: about 6% less time). Output is byte for byte the same.
+- The French regions whose formats differ from France's in Java 21.0.13 have their own locale:
+  `fr_LU` and `fr_MA` group digits with a point (`fr_MA` also has `MAD`, `jui.` for June and
+  a.m./p.m.), the CFA franc countries print `F CFA` (fr_SN, fr_CI, fr_BF, fr_BJ, fr_NE, fr_TG,
+  fr_ML) or `FCFA` (fr_GA, fr_CG, fr_CF, fr_GQ, fr_CM, fr_TD), fr_NC, fr_PF and fr_WF `FCFP`, and
+  fr_BI, fr_CD, fr_GN, fr_HT, fr_KM, fr_MG, fr_MU, fr_RW and fr_SC their own currency;
+  fr_DZ, fr_DJ, fr_SY, fr_MR, fr_TN, fr_VU and fr_TD use a 12-hour clock (short date and time,
+  `TIME()`), and `DATERANGE("WEEK")` starts on Saturday in fr_DZ, fr_DJ and fr_SY. Before, these
+  tags printed fr_FR's. Other `fr_` tags (fr_MC, fr_RE...) still take fr_FR's.
+- Every Spanish locale Java 21.0.13 has prints its own numbers and dates: `es` (`¤`, weeks from
+  Sunday), es_AR, es_CO, es_CL, es_PE, es_VE, es_UY, es_EC, es_GT, es_CR, es_BO, es_PY, es_SV,
+  es_HN, es_NI, es_PA, es_PR, es_CU, es_US, es_BZ, es_BR, es_PH, es_GQ, es_EA and es_IC, with
+  their separators (`1.234,50` in Argentina, Colombia, Chile, Uruguay...), currency, month names
+  (`setiembre` in Peru and Uruguay), short date and time (`05-07-26, 14:07` in Chile), `TIME()`
+  without a pattern (a 12-hour clock in CO, VE, PA, PR, PH and US) and first day of
+  `DATERANGE("WEEK")`. `es_419` takes Java's `¤` as its currency sign and starts its weeks on
+  Monday, `es_US` is no longer es_MX, and `es` is no longer es_ES in `REPORT_LOCALE`. Spanish
+  tags Java does not have (es_XX...) now take `es`'s separators, month and day names, short date
+  and time and `TIME()`, as Java writes them, instead of es_419's, and are `es` in
+  `REPORT_LOCALE` (they were `es_419`).
+- Icon labels place their label and icon where `hAlign` and `vAlign` say (or the
+  `hImageAlign` and `vImageAlign` of the element's style), as JasperReports 7 does: side by side
+  as one block left, centered or right, each at the top, middle or bottom; one above the other,
+  each left, centered or right, as one block up and down. JasperReports' iconlabel sample now
+  comes out the same.
+- A text narrower than its characters, broken one character a line, no longer ends with an
+  empty line: a stretching text field 6 points wide with `Ab` is two lines tall, as in
+  JasperReports, not three.
+- Icon labels are sized as JasperReports 7 sizes them: the icon as wide as its text, half its
+  font size from the label, which gets the rest of the width, or shrinks to its text unless
+  `labelFill` is `Horizontal` or `Both`; with `Vertical` or `Both` it is as tall as the element.
+  Both go inside the component's padding (its own `<box>` is read), the icon above or below the
+  label when it does not fit beside it, and the element is printed as tall as its content asks.
+  Before, the icon had a square as tall as the element and the label the rest.
+- tools/samples.py gives ferroreport the font extensions inside the JasperReports jars as resource
+  folders, as JasperReports finds them on its class path. The iconlabel sample draws its icons in
+  "JasperReports Icons", the icon font of JasperReports' core jar (not of the sample), which
+  ferroreport does not have built in; it was drawn without them.
+- A limit on the rows one render reads (#108): `Renderer::max_rows`, `--max-rows` for `render`
+  and `serve` (answered `413` and counted in `ferroreport_render_limited_total`), `max_rows=` in
+  Python, `maxRows` in JavaScript and `.maxRows(n)` in Java. The rows of subreports, tables,
+  lists, charts and crosstabs count toward the same total, so a report that reads many rows but
+  prints few pages (only a summary, one chart over all the rows) stops at the first row past the
+  limit instead of running until the timeout. `Limits` is unchanged.
 - Thermometer charts are drawn as JasperReports 7 draws them (JFreeChart's `ThermometerPlot`):
   the bulb and stem at their fixed size with both outlines, the mercury and its rounded top,
   the range marks where each range starts in green, orange and red, the axis with whole-number
@@ -36,10 +79,10 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   `<iconTextField>` straight inside the component, are drawn. They were left out, so the
   component printed nothing.
 - French number and date formats, as Java 21 has them: `fr`, `fr_FR`, `fr_BE`, `fr_CA` and
-  `fr_CH` (other `fr_` tags take fr_FR's), with their separators (a narrow no-break space
-  between groups, a no-break space in Canada), currency, month and day names, AM/PM and short
-  date and time. A currency pattern in French Switzerland takes a point as its decimal
-  separator, as Java does. Before, these locales printed `en_US`'s.
+  `fr_CH` (for the other `fr_` tags, see the French regions entry above), with their separators
+  (a narrow no-break space between groups, a no-break space in Canada), currency, month and day
+  names, AM/PM and short date and time. A currency pattern in French Switzerland takes a point as
+  its decimal separator, as Java does. Before, these locales printed `en_US`'s.
 - Website: the home page is also in Portuguese (Brazil), at `/pt/`, with PT in the EN / ES
   switch of the home pages and in their `hreflang` alternates and the sitemap; its other links
   go to the English documentation, migration guide and comparison.
@@ -68,10 +111,7 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 - Spanish locales print what Java 21.0.13 prints: AM/PM with a no-break space (`p. m.`), the
   short date and time of a date without a pattern for es_DO (`5/7/26, 2:07 p. m.`) and es_MX
   (`05/07/26, 14:07`), and `TIME()` without a pattern for es_DO (`10:30:15 a. m. UTC`) and
-  es_MX (`10:30:15 UTC`). The other Spanish tags (`es_419`, `es_AR`, `es_UY`...) keep es_DO's
-  numbers with Java's 24-hour clock (`5/7/26, 14:07`, `TIME()` `10:30:15 UTC`) and are
-  `es_419` in `REPORT_LOCALE` and the PDF's language (before `es_DO`, and `es_MX` for
-  `es_419`, whose currency sign is now `RD$` instead of `$`).
+  es_MX (`10:30:15 UTC`).
 - Portuguese number and date formats, as Java 21 has them: `pt`, `pt_BR` and `pt_PT` (other `pt_`
   tags take pt_PT's), with their separators (a no-break space between groups in Portugal),
   currency, month and day names, AM/PM ("da manhã" / "da tarde" in Portugal), short date and
@@ -94,6 +134,10 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 - Examples: a bank account statement (`examples/bank-statement/`), with a running balance,
   debit and credit columns, monthly groups with totals and a closing summary. It renders the
   same as in JasperReports 7.1.1.
+- `migrate --strict-pixels` (with `--jasper`) fails when a page of a template both engines
+  render is a different picture (over 0.15% of its ink), listing each template with its worst
+  page, or when the pages could not be compared (no `pdftoppm`). `--strict` and `same` do not
+  change.
 
 ## 1.3.0
 

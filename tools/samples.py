@@ -32,6 +32,11 @@ The sample's own Java classes are compiled and given to JasperReports, since som
 call them from their expressions. ferroreport never runs Java code, so those templates count
 against it.
 
+The font extensions inside the JasperReports jars are given to ferroreport as resource folders,
+since JasperReports finds them on its class path: the core jar has one for the icon font
+("JasperReports Icons") that the iconlabel sample draws its icons in. (DejaVu, the font
+extension of jasperreports-fonts, is built into ferroreport.)
+
 Writes docs/samples.json and docs/samples.md.
 """
 import argparse
@@ -43,6 +48,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -213,6 +219,37 @@ def sample_classes(sample, lib, out_root, done={}):
     return done[sample]
 
 
+def font_extensions(lib, out_root):
+    """The font extensions of the jars in `lib`, each unpacked in a folder of its own (its
+    jasperreports_extension.properties at the folder's root, the files it names under it), as
+    JasperReports finds them on its class path. ferroreport reads them from resource folders."""
+    folders = []
+    for jar in sorted(Path(lib).glob("*.jar")):
+        if jar.name.startswith("jasperreports-fonts-"):
+            continue  # DejaVu, built into ferroreport
+        with zipfile.ZipFile(jar) as z:
+            try:
+                props = z.read("jasperreports_extension.properties").decode("latin-1")
+            except KeyError:
+                continue
+            files = [v.strip().lstrip("/") for k, v in (line.split("=", 1) for line in props.splitlines() if "=" in line)
+                     if k.strip().startswith("net.sf.jasperreports.extension.simple.font.families.")]
+            if not files:
+                continue
+            folder = out_root / "font-extensions" / jar.stem
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "jasperreports_extension.properties").write_text(props, encoding="latin-1")
+            # The fonts.xml files, and the fonts next to them.
+            dirs = {f.rsplit("/", 1)[0] + "/" for f in files if "/" in f}
+            for name in z.namelist():
+                if not name.endswith("/") and (name in files or any(name.startswith(d) for d in dirs)):
+                    target = folder / name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(z.read(name))
+            folders.append(folder)
+    return folders
+
+
 def run(cmd, cwd=None, timeout=120):
     started = time.perf_counter()
     try:
@@ -244,6 +281,7 @@ def main():
         oracle.mkdir(parents=True, exist_ok=True)
         subprocess.run(["javac", "--release", "17", "-proc:none", "-nowarn", "-cp", f"{args.lib}/*", "-d", str(oracle), str(ROOT / "tools" / "oracle" / "Oracle.java")], check=True)
     out_root = Path(args.out).resolve()
+    fonts = font_extensions(args.lib, out_root)
     results = []
     for template in sorted((demo / "samples").rglob("*.jrxml")):
         rel = template.relative_to(demo / "samples")
@@ -271,7 +309,7 @@ def main():
         if rows is not None:
             data_file.write_text(json.dumps(rows))
             row["rows"] = len(rows)
-        resources = [str(sample), str(sample / "src"), str(template.parent)]
+        resources = [str(sample), str(sample / "src"), str(template.parent), *map(str, fonts)]
 
         jasper_pdf, ours_pdf = out / "jasper.pdf", out / "ferroreport.pdf"
         classes = sample_classes(sample, args.lib, out_root)

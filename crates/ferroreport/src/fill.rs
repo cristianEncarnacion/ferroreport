@@ -264,8 +264,9 @@ impl<'a> Rows<'a> {
         Rows { source: RowSource::Slice(records.iter()), seen: Vec::new(), keep_all: needs_all_rows(report), count: 0 }
     }
 
-    /// Moves to the next row; false at the end (the last row stays current).
-    fn advance(&mut self) -> Result<bool> {
+    /// Moves to the next row; false at the end (the last row stays current). Every row read
+    /// counts toward the render's row limit, kept with `images`.
+    fn advance(&mut self, images: &mut ImageStore) -> Result<bool> {
         let next = match &mut self.source {
             RowSource::Slice(it) => it.next().map(|r| Ok(Row::Borrowed(r))),
             RowSource::Stream(it) => it.next().map(|r| r.map(Row::Owned)),
@@ -273,6 +274,7 @@ impl<'a> Rows<'a> {
         match next {
             Some(row) => {
                 let row = row?;
+                count_rows(images, 1)?;
                 if !self.keep_all && self.seen.len() >= 2 {
                     self.seen.remove(0);
                 }
@@ -360,6 +362,23 @@ fn check_time(images: &ImageStore) -> Result<()> {
         }
         _ => Ok(()),
     }
+}
+
+/// Counts `n` rows read toward the render's row limit ([`crate::Renderer::max_rows`]): the
+/// report's own rows and those of its subreports, tables, lists, charts and crosstabs. The
+/// count travels with the image store, as the deadline does.
+fn count_rows(images: &mut ImageStore, n: usize) -> Result<()> {
+    images.rows_read = images.rows_read.saturating_add(n);
+    match images.max_rows {
+        Some(max) if images.rows_read > max => Err(Error::Limit(format!("the report reads more than {max} rows"))),
+        _ => Ok(()),
+    }
+}
+
+/// How many rows a query needs to give to reach the row limit and go one past it: reading
+/// more would only be thrown away.
+fn rows_left(images: &ImageStore) -> Option<usize> {
+    images.max_rows.map(|max| max.saturating_sub(images.rows_read).saturating_add(1))
 }
 
 /// Receives the pages of a report as they are finished, so a long report never has to be
@@ -691,8 +710,7 @@ fn chart_over_run(
     inner.evaluation_group = None;
     crate::chart::copy_settings(ch, &inner);
     let report = crate::table::chart_report(inner, run, w, h);
-    let connection = images.connection.clone();
-    let (params, records) = run_inputs(run, &report, scope, env, "chart", connection.as_ref())?;
+    let (params, records) = run_inputs(run, &report, scope, env, "chart", images)?;
     if images.depth >= MAX_SUBREPORT_DEPTH {
         return Err(Error::Unsupported(format!("chart: nested more than {MAX_SUBREPORT_DEPTH} levels")));
     }
@@ -1085,6 +1103,126 @@ fn text_form<'a>(fonts: &mut FontSet, te: &'a TextElement, color: Color, text: &
     }
 }
 
+/// The width of the widest line of `text` laid out in `te` `w` wide, and the height `te` needs
+/// for it, padding included: what JasperReports measures while filling
+/// (`JRFillTextElement.getTextWidth`, and the text height of `chopTextElement`). An empty text
+/// is not measured: no width, no height.
+fn text_extent(fonts: &mut FontSet, te: &TextElement, color: Color, w: f32, text: &str) -> (f32, f32) {
+    if text.is_empty() {
+        return (0.0, 0.0);
+    }
+    let p = te.boxed.padding;
+    match text_form(fonts, te, color, text) {
+        TextForm::Plain(te) => {
+            let hyphenator = fonts.hyphenator();
+            let id = fonts.resolve(&te.style.font);
+            let face = fonts.face(id);
+            let size = te.style.font.size;
+            let lines = break_lines_hyphenated(text, face, size, (w - p.left - p.right).max(0.0), Measure::Fill, hyphenator);
+            let vm = vertical_metrics(face, size, te.style.line_spacing);
+            // A line's own width is the drawn one (iText's); filling measures with AWT's exact
+            // advances (shaped text has them already).
+            let width = |l: &crate::text::Line| {
+                if crate::shape::needs_shaping(&l.text) {
+                    l.width
+                } else {
+                    face.fill_width(&l.text, size)
+                }
+            };
+            (lines.iter().map(width).fold(0.0, f32::max), p.top + p.bottom + vm.block_height(lines.len()))
+        }
+        TextForm::Styled(_) => {
+            let (item, needed) = text_item(fonts, te, color, 0.0, 0.0, w, f32::MAX, text, false);
+            // The runs of a line share its baseline.
+            fn lines(item: &PrintItem, out: &mut Vec<(f32, f32, f32)>) {
+                match item {
+                    PrintItem::Text(t) => out.extend(t.lines.iter().map(|l| (l.baseline, l.x, l.x + l.width))),
+                    PrintItem::Group(items) | PrintItem::Paragraphs(_, items) | PrintItem::Transform(_, items) => {
+                        items.iter().for_each(|i| lines(i, out))
+                    }
+                    PrintItem::Cell(_, item) => lines(item, out),
+                    _ => {}
+                }
+            }
+            let mut all = Vec::new();
+            lines(&item, &mut all);
+            let mut widest = 0.0f32;
+            for &(baseline, ..) in &all {
+                let on = all.iter().filter(|l| (l.0 - baseline).abs() < 1e-3);
+                let (start, end) = on.fold((f32::INFINITY, f32::NEG_INFINITY), |(s, e), l| (s.min(l.1), e.max(l.2)));
+                widest = widest.max(end - start);
+            }
+            (widest, needed)
+        }
+    }
+}
+
+/// Measures an icon label (a frame with [`crate::iconlabel::of`]) as JasperReports prepares it.
+fn prepare_icon_label(
+    le: &mut LayoutEnv,
+    el: &Element,
+    boxed: &BoxStyle,
+    label: &Element,
+    icon: &Element,
+) -> Result<crate::iconlabel::Prepared> {
+    // The text of each field; a field not printed (or evaluated later) measures nothing.
+    fn field<'e>(le: &LayoutEnv, child: &'e Element) -> Result<(&'e TextElement, String)> {
+        let ElementKind::Text(te) = &child.kind else { unreachable!("an icon label's fields are texts") };
+        let visible = match &child.print_when {
+            Some(e) => condition(&eval(e, le.scope, le.env)?, le.env)?,
+            None => true,
+        };
+        let deferred = matches!(&te.content, TextContent::Expression { evaluation_time, .. }
+            if !matches!(evaluation_time, EvaluationTime::Now | EvaluationTime::Band));
+        let text = if visible && !deferred { text_value_full(&te.content, le.scope, le.env)?.text } else { String::new() };
+        Ok((te, text))
+    }
+    let (label_te, label_text) = field(le, label)?;
+    let (icon_te, icon_text) = field(le, icon)?;
+    let fonts = &mut *le.fonts;
+    let mut measure = |is_icon: bool, w: f32| {
+        let (child, te, text) = if is_icon { (icon, icon_te, &icon_text) } else { (label, label_te, &label_text) };
+        let (text_width, needed) = text_extent(fonts, te, child.forecolor, w, text);
+        // A field that stretches is as tall as its text, in whole points, or as designed.
+        let height = if te.stretch { child.height.max((needed - 1e-3).ceil()) } else { child.height };
+        crate::iconlabel::Measured { text_width, height }
+    };
+    let pad = |te: &TextElement| te.boxed.padding.left + te.boxed.padding.right;
+    let fields = crate::iconlabel::Fields {
+        label_padding: pad(label_te),
+        icon_padding: pad(icon_te),
+        icon_font_size: icon_te.style.font.size,
+        label_stretches: label_te.stretch,
+    };
+    Ok(crate::iconlabel::prepare(el.width, el.height, boxed.padding, f32::INFINITY, &fields, &mut measure))
+}
+
+/// The label and the icon of an icon label placed in its frame, `width` wide and finally
+/// `height` tall.
+fn icon_label_children(
+    settings: crate::iconlabel::Settings,
+    prepared: &crate::iconlabel::Prepared,
+    boxed: &BoxStyle,
+    label: &Element,
+    icon: &Element,
+    width: f32,
+    height: f32,
+) -> Vec<Element> {
+    let placed = crate::iconlabel::place(settings, prepared, width, boxed.padding, height);
+    let put = |e: &Element, [x, y, w, h]: [f32; 4]| {
+        let mut e = e.clone();
+        // Inside the frame's padding (exporters offset a frame's elements by it); the fields
+        // do not stretch with the frame.
+        (e.x, e.y, e.width, e.height) = (prepared.left + x, boxed.padding.top + y, w, h);
+        e.stretch_type = StretchType::NoStretch;
+        e.position_type = PositionType::Fix;
+        e
+    };
+    let mut out = vec![put(label, placed.label)];
+    out.extend(placed.icon.map(|b| put(icon, b)));
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 fn plain_text_item(
     fonts: &mut FontSet,
@@ -1404,6 +1542,9 @@ struct Measured {
     image_box: Option<(f32, f32)>,
     /// A crosstab: where it starts, and the room it gets on this page (`None`: all of it).
     crosstab: Option<(crate::crosstab::Rest, Option<f32>)>,
+    /// An icon label: its settings and what measuring it gave, to place its fields again once
+    /// its final height is known.
+    icon_label: Option<(crate::iconlabel::Settings, crate::iconlabel::Prepared)>,
 }
 
 /// Lays out `elements` in a container of design height `design_h`. With `avail`, content
@@ -1458,6 +1599,7 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
             symbol: None,
             crosstab: None,
             image_box: None,
+            icon_label: None,
         };
         if visible {
             match &el.kind {
@@ -1494,6 +1636,20 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
                             m.image_box = Some((dx, w));
                         }
                     }
+                }
+                ElementKind::Frame { children, boxed } if crate::iconlabel::of(children).is_some() => {
+                    let Some((settings, label, icon)) = crate::iconlabel::of(children) else { unreachable!() };
+                    // It takes the room it asks for in the band, never less than designed, but
+                    // is printed as tall as it asks to be (see step 4), its fields placed for
+                    // that height.
+                    let prepared = prepare_icon_label(le, el, boxed, label, icon)?;
+                    m.new_h = el.height.max(prepared.height);
+                    let fields = icon_label_children(settings, &prepared, boxed, label, icon, el.width, prepared.height);
+                    let inner = layout_elements(le, &fields, prepared.height, None)?;
+                    printed_values.extend(inner.printed_values.iter().cloned());
+                    returns.extend(inner.returns.iter().cloned());
+                    m.children = Some(inner);
+                    m.icon_label = Some((settings, prepared));
                 }
                 ElementKind::Frame { children, .. } => {
                     let inner = layout_elements(le, children, el.height, None)?;
@@ -1680,6 +1836,13 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
             StretchType::ContainerBottom => h = height - y,
             StretchType::NoStretch => {}
         }
+        // An icon label that does not stretch with its container is printed as tall as it
+        // asked to be, even when that is less than its designed height: JasperReports gives
+        // the component the height it prepared (JRFillComponentElement.setStretchHeight), not
+        // the element's, unless the container stretches it further.
+        if let (Some((_, p)), StretchType::NoStretch) = (&m.icon_label, el.stretch_type) {
+            h = p.height;
+        }
         if el.position_type == PositionType::FixRelativeToBottom {
             y += growth;
         }
@@ -1760,6 +1923,16 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
                             continue;
                         }
                         m.text = Some(text);
+                        h = a - y;
+                    }
+                    // An icon label is not split: one whose designed height does not fit moves
+                    // whole to the next page (JRFillComponentElement.prepare); the rest ends at
+                    // the cut.
+                    ElementKind::Frame { children, .. } if crate::iconlabel::of(children).is_some() => {
+                        if y + el.height > a + 1e-3 {
+                            rest.push(frozen(le.fonts, el, None));
+                            continue;
+                        }
                         h = a - y;
                     }
                     ElementKind::Frame { children, boxed } => {
@@ -1971,7 +2144,16 @@ fn layout_elements(le: &mut LayoutEnv, original: &[Element], design_h: f32, avai
                 });
                 close_mark(&mut out.items, mark);
             }
-            ElementKind::Frame { boxed, .. } => {
+            ElementKind::Frame { boxed, children } => {
+                // An icon label printed taller than it asked to be (stretched with its container)
+                // or cut places its fields again for the height it has: JasperReports fills the
+                // component after giving it its final height.
+                if let (Some((settings, prepared)), Some((_, label, icon))) = (&m.icon_label, crate::iconlabel::of(children)) {
+                    if (h - prepared.height).abs() > 1e-3 {
+                        let fields = icon_label_children(*settings, prepared, boxed, label, icon, w, h);
+                        m.children = Some(layout_elements(le, &fields, h, None)?);
+                    }
+                }
                 let frame_box = frame_split.as_ref().map(|f| f.1).unwrap_or(*boxed);
                 let mark = open_mark(&mut out.items, el, Shape::Frame, Some(frame_box), x, y, w, h);
                 if el.mode == Mode::Opaque {
@@ -2425,7 +2607,7 @@ fn run_subreport(le: &mut LayoutEnv, sr: &SubreportElement) -> Result<(Vec<Segme
     let records = match (&sr.data_source, sr.connection, connection, &report.query) {
         (None, true, Some(conn), Some(_)) => {
             let env = EvalEnv { locale: le.env.locale, groovy: report.language == Language::Groovy, now: le.env.now };
-            query_records(&report, &params, &conn, &env)?
+            query_records(&report, &params, &conn, &env, rows_left(le.images))?
         }
         _ => {
             let rows = match &sr.data_source {
@@ -2623,7 +2805,7 @@ fn fill_crosstab(le: &mut LayoutEnv, ct: &CrosstabElement, el: &Element) -> Resu
         }
         let connection = le.images.connection.clone();
         let records = match (&run.data_source, run.connection, connection, &report.query) {
-            (None, true, Some(conn), Some(_)) => query_records(&report, &run_params, &conn, le.env)?,
+            (None, true, Some(conn), Some(_)) => query_records(&report, &run_params, &conn, le.env, rows_left(le.images))?,
             _ => {
                 let rows = match &run.data_source {
                     Some(e) => match eval(e, le.scope, le.env)? {
@@ -2638,6 +2820,8 @@ fn fill_crosstab(le: &mut LayoutEnv, ct: &CrosstabElement, el: &Element) -> Resu
                 crate::data::records_from_json(&report, &rows)?
             }
         };
+        // Read here rather than by a fill of their own: counted here.
+        count_rows(le.images, records.len())?;
         own_records = records.into_iter().map(Row::Owned).collect();
         dataset_fields = report.fields.clone();
     }
@@ -3009,8 +3193,7 @@ fn run_dataset_report(le: &mut LayoutEnv, run: &DatasetRun, report: &Report, wha
     if le.images.depth >= MAX_SUBREPORT_DEPTH {
         return Err(Error::Unsupported(format!("{what}: nested more than {MAX_SUBREPORT_DEPTH} levels")));
     }
-    let connection = le.images.connection.clone();
-    let (params, records) = run_inputs(run, report, le.scope, le.env, what, connection.as_ref())?;
+    let (params, records) = run_inputs(run, report, le.scope, le.env, what, le.images)?;
     let env = EvalEnv { locale: le.env.locale, groovy: report.language == Language::Groovy, now: le.env.now };
     count_run(le, what)?;
     le.images.depth += 1;
@@ -3026,7 +3209,7 @@ fn run_inputs(
     scope: &dyn Scope,
     env: &EvalEnv,
     what: &str,
-    connection: Option<&crate::sql::Shared>,
+    images: &ImageStore,
 ) -> Result<(HashMap<String, Value>, Vec<Record>)> {
     let mut params = HashMap::new();
     if let Some(e) = &run.parameters_map {
@@ -3047,8 +3230,8 @@ fn run_inputs(
     if let Ok(bundle) = scope.param(crate::expr::eval::RESOURCE_BUNDLE) {
         params.entry(crate::expr::eval::RESOURCE_BUNDLE.into()).or_insert(bundle);
     }
-    if let (None, true, Some(conn), Some(_)) = (&run.data_source, run.connection, connection, &report.query) {
-        let records = query_records(report, &params, conn, env)?;
+    if let (None, true, Some(conn), Some(_)) = (&run.data_source, run.connection, &images.connection, &report.query) {
+        let records = query_records(report, &params, conn, env, rows_left(images))?;
         return Ok((params, records));
     }
     let rows = match &run.data_source {
@@ -3120,9 +3303,14 @@ fn query_records(
     params: &HashMap<String, Value>,
     conn: &crate::sql::Shared,
     env: &EvalEnv,
+    rows_left: Option<usize>,
 ) -> Result<Vec<Record>> {
     let params = resolve_params(report, params.clone(), env)?;
-    crate::sql::query_rows(report, &params, conn.0.as_ref())?.collect()
+    let rows = crate::sql::query_rows(report, &params, conn.0.as_ref())?;
+    match rows_left {
+        Some(n) => rows.take(n).collect(),
+        None => rows.collect(),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3453,6 +3641,19 @@ impl<'a> Filler<'a> {
         self.layout_within(band, mode, None, 0.0)
     }
 
+    /// Lays out (with `lay`) a band that may already have been laid out for the same row, to
+    /// see whether it fits or to cut it: the rows its subreports, tables, lists, charts and
+    /// crosstabs read count once toward the row limit, however many times it is laid out.
+    /// `charged` is what this band has counted so far (0 before its first layout).
+    fn once<T>(&mut self, charged: &mut usize, lay: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
+        let base = self.images.rows_read.saturating_sub(*charged);
+        self.images.rows_read = base;
+        let laid = lay(self);
+        *charged = (*charged).max(self.images.rows_read.saturating_sub(base));
+        self.images.rows_read = base.saturating_add(*charged);
+        laid
+    }
+
     /// Lays out a band, cut at `avail` points when given (what does not fit is dropped),
     /// and at least `min_height` tall.
     fn layout_within(&mut self, band: &Band, mode: Values, avail: Option<f32>, min_height: f32) -> Result<Option<BandLayout>> {
@@ -3730,7 +3931,8 @@ impl<'a> Filler<'a> {
     /// margin, goes on on the next pages, which get no page header or footer of their own
     /// (as in JasperReports).
     fn print_title(&mut self, band: &Band) -> Result<()> {
-        let Some(full) = self.layout(band, Values::Committed)? else { return Ok(()) };
+        let mut charged = 0;
+        let Some(full) = self.once(&mut charged, |f| f.layout(band, Values::Committed))? else { return Ok(()) };
         let limit = self.report.page_height - self.report.margins.bottom;
         if self.flow.is_some() || full.height <= limit - self.offset_y + 1e-3 {
             let (y, h) = (self.offset_y, full.height);
@@ -3743,12 +3945,12 @@ impl<'a> Filler<'a> {
         let mut first = Some(full);
         loop {
             let space = limit - self.offset_y;
-            let part = self.layout_elems(&elements, design_h, Values::Committed, Some(space))?;
+            let part = self.once(&mut charged, |f| f.layout_elems(&elements, design_h, Values::Committed, Some(space)))?;
             if part.items.is_empty() {
                 // Nothing fits even on a new page: print it whole rather than loop forever.
                 let whole = match first.take() {
                     Some(l) => l,
-                    None => self.layout_elems(&elements, design_h, Values::Committed, None)?,
+                    None => self.once(&mut charged, |f| f.layout_elems(&elements, design_h, Values::Committed, None))?,
                 };
                 let (y, h) = (self.offset_y, whole.height);
                 self.emit(whole, y);
@@ -3978,7 +4180,8 @@ impl<'a> Filler<'a> {
     }
 
     fn print_body_band_in_column(&mut self, band: &Band, mode: Values) -> Result<()> {
-        let Some(first) = self.layout(band, mode)? else { return Ok(()) };
+        let mut charged = 0;
+        let Some(first) = self.once(&mut charged, |f| f.layout(band, mode))? else { return Ok(()) };
         let footer_mode = if mode == Values::Estimated { Values::Committed } else { mode };
         let mut elements: Vec<Element> = band.elements.clone();
         let mut design_h = band.height;
@@ -3986,7 +4189,7 @@ impl<'a> Filler<'a> {
         loop {
             let full = match layout.take() {
                 Some(l) => l,
-                None => self.layout_elems(&elements, design_h, mode, None)?,
+                None => self.once(&mut charged, |f| f.layout_elems(&elements, design_h, mode, None))?,
             };
             let space = self.body_limit() - self.offset_y;
             if full.height <= space + 1e-3 {
@@ -4016,7 +4219,7 @@ impl<'a> Filler<'a> {
                 self.in_column = true;
                 continue;
             }
-            let part = self.layout_elems(&elements, design_h, mode, Some(space))?;
+            let part = self.once(&mut charged, |f| f.layout_elems(&elements, design_h, mode, Some(space)))?;
             let rest = part.rest.clone().unwrap_or_default();
             let keep_top = part.rest_reprints;
             if part.items.is_empty() && !self.page_has_content {
@@ -4261,7 +4464,7 @@ impl<'a> Filler<'a> {
 
     fn run(&mut self) -> Result<()> {
         let r = self.report;
-        let no_data = !self.rows.advance()?;
+        let no_data = !self.rows.advance(self.images)?;
         if no_data {
             match r.when_no_data {
                 WhenNoData::NoPages => return Ok(()),
@@ -4327,7 +4530,7 @@ impl<'a> Filler<'a> {
             if idx % 256 == 0 {
                 check_time(self.images)?;
             }
-            more = self.rows.advance()?;
+            more = self.rows.advance(self.images)?;
         }
 
         // End of data: closing group footers see the last record.
@@ -4349,7 +4552,8 @@ impl<'a> Filler<'a> {
         match &r.summary {
             None => self.page_footers(true, Values::Committed)?,
             Some(summary) => {
-                let layout = self.layout(summary, Values::Committed)?;
+                let mut charged = 0;
+                let layout = self.once(&mut charged, |f| f.layout(summary, Values::Committed))?;
                 let h = layout.as_ref().map(|l| l.height).unwrap_or(0.0);
                 // A summary with splitType="Immediate" starts on this page when its first
                 // element fits (JasperReports' break height), and goes on over the next pages.
@@ -4361,7 +4565,7 @@ impl<'a> Filler<'a> {
                     && self.offset_y + h > self.body_limit() + 1e-3
                     && self.offset_y + break_height <= self.body_limit() + 1e-3;
                 if splits_here {
-                    self.split_summary(summary)?;
+                    self.split_summary(summary, &mut charged)?;
                 } else if r.summary_new_page || self.column > 0 || self.offset_y + h > self.body_limit() + 1e-3 {
                     self.page_footers(false, Values::Committed)?;
                     self.new_page()?;
@@ -4370,7 +4574,7 @@ impl<'a> Filler<'a> {
                     } else {
                         self.footers_done = true;
                     }
-                    if let Some(l) = self.layout(summary, Values::Committed)? {
+                    if let Some(l) = self.once(&mut charged, |f| f.layout(summary, Values::Committed))? {
                         let y = self.offset_y;
                         let h = l.height;
                         self.emit(l, y);
@@ -4396,7 +4600,7 @@ impl<'a> Filler<'a> {
     /// JasperReports does (`fillSummaryNoLastFooterSamePage`): what fits on this page, which
     /// keeps its page footer, then the rest on new pages, which have the page header and
     /// footer only with `isSummaryWithPageHeaderAndFooter`.
-    fn split_summary(&mut self, summary: &Band) -> Result<()> {
+    fn split_summary(&mut self, summary: &Band, charged: &mut usize) -> Result<()> {
         let r = self.report;
         let mode = Values::Committed;
         let mut elements = summary.elements.clone();
@@ -4411,7 +4615,7 @@ impl<'a> Filler<'a> {
                 r.page_height - r.margins.bottom - pf
             };
             let space = limit - self.offset_y;
-            let full = self.layout_elems(&elements, design_h, mode, None)?;
+            let full = self.once(charged, |f| f.layout_elems(&elements, design_h, mode, None))?;
             if full.height <= space + 1e-3 {
                 let (y, h) = (self.offset_y, full.height);
                 self.emit(full, y);
@@ -4419,7 +4623,7 @@ impl<'a> Filler<'a> {
                 self.page_has_content = true;
                 break;
             }
-            let part = self.layout_elems(&elements, design_h, mode, Some(space))?;
+            let part = self.once(charged, |f| f.layout_elems(&elements, design_h, mode, Some(space)))?;
             let rest = part.rest.clone().unwrap_or_default();
             if part.items.is_empty() && !self.page_has_content {
                 // Nothing fits even on an empty page: print it whole rather than loop forever.
@@ -4465,6 +4669,7 @@ pub fn fill(
     env: &EvalEnv,
 ) -> Result<PrintDocument> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = false;
     images.deadline = None;
@@ -4484,6 +4689,7 @@ pub fn fill_slice(
     limits: Limits,
 ) -> Result<PrintDocument> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = false;
     images.deadline = limits.deadline();
@@ -4504,6 +4710,7 @@ pub fn fill_rows(
     limits: Limits,
 ) -> Result<PrintDocument> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = false;
     images.deadline = limits.deadline();
@@ -4527,6 +4734,7 @@ pub fn fill_to(
     sink: &mut dyn PageSink,
 ) -> Result<FillStats> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = !sink.wants_cells();
     images.deadline = limits.deadline();
@@ -4566,10 +4774,14 @@ fn fill_flow_inner(
 ) -> Result<(Vec<Segment>, HashMap<String, Value>)> {
     let mut row_heights = Vec::new();
     if report.horizontal {
+        // The rows are read again below: this pass does not count them.
+        let read = images.rows_read;
         let mut first = new_filler(report, Rows::from_slice(records, report), params.clone(), fonts, images, env)?;
         first.flow = Some(Vec::new());
         first.run()?;
         row_heights = std::mem::take(&mut first.row_heights);
+        drop(first);
+        images.rows_read = read;
     }
     let mut filler = new_filler(report, Rows::from_slice(records, report), params, fonts, images, env)?;
     filler.flow = Some(Vec::new());

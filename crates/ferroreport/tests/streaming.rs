@@ -195,6 +195,76 @@ fn limits_stop_a_render() {
 }
 
 #[test]
+fn a_row_limit_stops_a_report_that_reads_more_than_it_prints() {
+    // Only a summary: a million rows would make one page, which no page limit stops.
+    let report = ferroreport::parse(
+        r#"<jasperReport name="totals" pageWidth="300" pageHeight="100" columnWidth="300" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0">
+        <field name="n" class="java.lang.Integer"/>
+        <variable name="total" class="java.lang.Integer" calculation="Sum"><variableExpression><![CDATA[$F{n}]]></variableExpression></variable>
+        <summary><band height="20"><textField><reportElement x="0" y="0" width="300" height="20"/><textFieldExpression><![CDATA["rows " + $V{REPORT_COUNT} + " total " + $V{total}]]></textFieldExpression></textField></band></summary>
+    </jasperReport>"#,
+    )
+    .unwrap();
+    let row = ferroreport::data::records_from_json(&report, &serde_json::json!([{ "n": 1 }])).unwrap().remove(0);
+    // Rows that never end, counting how many the render asked for.
+    let read = Rc::new(Cell::new(0usize));
+    let render = |max: usize, rows: Option<usize>| {
+        let (row, counter) = (row.clone(), read.clone());
+        counter.set(0);
+        let endless = std::iter::repeat_with(move || {
+            counter.set(counter.get() + 1);
+            Ok(row.clone())
+        });
+        let rows: RowIter = match rows {
+            Some(n) => Box::new(endless.take(n)),
+            None => Box::new(endless),
+        };
+        let mut out = Vec::new();
+        let limits = Limits { max_pages: Some(1), timeout: None };
+        Renderer::new().limits(limits).max_rows(Some(max)).render_to(&report, rows, Default::default(), Format::Csv, &mut out)?;
+        Ok::<_, ferroreport::Error>(String::from_utf8(out).unwrap())
+    };
+    let err = render(1000, None).unwrap_err();
+    assert!(matches!(err, ferroreport::Error::Limit(_)), "{err}");
+    assert_eq!(err.to_string(), "limit exceeded: the report reads more than 1000 rows");
+    assert_eq!(read.get(), 1001, "stops at the first row past the limit");
+    // Up to the limit, the report is whole.
+    assert_eq!(render(1000, Some(1000)).unwrap().trim(), "rows 1000 total 1000");
+    assert!(render(1000, Some(1001)).is_err());
+    // Without a limit, every row is read.
+    let rows: RowIter = Box::new(std::iter::repeat_n(row.clone(), 5000).map(Ok));
+    let stats = Renderer::new().render_to(&report, rows, Default::default(), Format::Csv, Vec::new()).unwrap();
+    assert_eq!(stats.rows, 5000);
+}
+
+#[test]
+fn the_row_limit_counts_the_rows_of_subreports_and_datasets() {
+    // Every row read in the render counts: the report's and those of a subreport, a table, a
+    // list and a crosstab, each over a list field. A band laid out again (to split it over
+    // pages, or a horizontal list measured first) counts its rows once.
+    let fixtures = [
+        ("17-subreports", "lines"),
+        ("27-table", "lines"),
+        ("29-list", "contacts"),
+        ("41-horizontal-list", "contacts"),
+        ("31-crosstab-pages", "sales"),
+    ];
+    for (name, nested) in fixtures {
+        let f = load(name);
+        let rows: Vec<serde_json::Value> = serde_json::from_str(&f.data).unwrap();
+        let total = rows.len() + rows.iter().map(|r| r[nested].as_array().map_or(0, Vec::len)).sum::<usize>();
+        let render = |max: usize| {
+            let rows: RowIter = Box::new(JsonRows::new(&f.report, f.data.as_bytes()));
+            let params = ferroreport::params_from_json(&f.report, &f.params).unwrap();
+            f.renderer().max_rows(Some(max)).render_to(&f.report, rows, params, Format::Pdf, Vec::new())
+        };
+        render(total).unwrap_or_else(|e| panic!("{name}: {total} rows: {e}"));
+        let err = render(total - 1).unwrap_err();
+        assert!(err.to_string().contains(&format!("more than {} rows", total - 1)), "{name}: {err}");
+    }
+}
+
+#[test]
 fn bad_rows_stop_a_render_with_their_position() {
     let f = load("33-page-x-of-y");
     let data = r#"[{"id": 1, "name": "a", "salary": 1}, {"id": "x", "name": "b", "salary": 2}]"#;

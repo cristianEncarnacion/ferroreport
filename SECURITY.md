@@ -37,17 +37,20 @@ A template or its data cannot make a render use unbounded stack, memory or time:
 | Subreports, tables and lists filled in one render | 500,000 |
 | Sizes in a template (widths, heights, font sizes) | finite numbers up to 10 million; `inf`, `NaN` and the like are refused |
 | Pages in a report | yours to set: `--max-pages`, `Limits::max_pages`, `max_pages=`, `maxPages` |
+| Rows read in one render (the report's and those of its subreports, tables, lists, charts and crosstabs, together) | yours to set: `--max-rows`, `Renderer::max_rows`, `max_rows=`, `maxRows`, `.maxRows(n)` |
 | Time for a render | yours to set: `--timeout`, `Limits::timeout`, `timeout=`; 60 s by default in `ferroreport serve` |
 | One row of JSON data | 256 MB by default (`--max-row`, `JsonRows::max_row_bytes`); the buffer never grows past the limit before the row is refused |
-| HTTP request body (`ferroreport serve`) | 50 MB by default (`--max-body`). Rows sent one per line (`application/x-ndjson`) are read as they are needed and have no size limit of their own: the time and page limits stop them |
+| HTTP request body (`ferroreport serve`) | 50 MB by default (`--max-body`). Rows sent one per line (`application/x-ndjson`) are read as they are needed and have no size limit of their own: the time, page and row limits stop them |
 | Memory for one document waiting to be sent | 32 MB by default (`--spool-memory`); the rest goes to a file |
 | Disk for documents waiting to be sent, all requests together | 4 GB by default (`--spool-disk`); over it the answer is `507` |
 
 Other inputs grow the work in proportion to their size: pages follow the rows of the data. That
-is what the page and time limits are for: set them whenever templates or data come from other
-people. The time limit is checked on every page, every few hundred rows and at every
+is what the page, row and time limits are for: set them whenever templates or data come from other
+people. A report can read many rows and print few pages (only a summary, totals by group with an
+empty detail, one chart over all the rows): the row limit stops it at the first row past it,
+where the page limit would not stop it at all. The time limit is checked on every page, every few hundred rows and at every
 subreport, table and list, so it also stops work that happens inside them. (In the browser
-build there is no clock to check: use `maxPages` there.)
+build there is no clock to check: use `maxPages` and `maxRows` there.)
 
 Memory does not grow with the report: rows are read as they are needed and each page is
 written as it is finished, in PDF, Excel, Word, CSV and HTML alike. What is kept until the end
@@ -94,8 +97,9 @@ relative paths inside `--templates`. A failure while rendering one request answe
 does not stop the server. `GET /health` answers without the token (it only says the server is up); every other
 path, `GET /metrics` included, needs it.
 
-Every render runs under `--timeout` (60 seconds unless you change it) and `--max-pages` (no
-limit unless you set one); a render that goes over answers `413`. The number of renders at
+Every render runs under `--timeout` (60 seconds unless you change it), `--max-pages` and
+`--max-rows` (no limit unless you set one); a render that goes over answers `413` and is counted
+in `ferroreport_render_limited_total`. The number of renders at
 once is `--workers`, and `--rate-limit <n>` caps the requests per minute from one client address
 (over it, the answer is `429` with `Retry-After`). Behind a reverse proxy every request comes
 from the proxy's address, so set the limit there instead.

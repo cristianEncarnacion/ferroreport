@@ -46,8 +46,10 @@ with open("invoice.pdf", "wb") as f:
 - For rows that do not fit in memory, give `data_file="rows.jsonl"` instead of `data`: a JSON
   array or one object per line, read as the report needs it. A million rows render in about
   19 MB.
-- `max_pages=` and `timeout=` (seconds) stop a report that grows past what you expect; set
-  them when templates or data come from other people. `csv_safe=True` guards CSV against
+- `max_pages=`, `max_rows=` and `timeout=` (seconds) stop a report that grows past what you
+  expect (`max_rows=` counts the rows of subreports and datasets too, and stops a summary over
+  a million rows that `max_pages=` would not); set them when templates or data come from other
+  people. `csv_safe=True` guards CSV against
   spreadsheet formulas in the data, and `xlsx_numbers=True` writes numbers as numbers (Excel and ODS).
 - `ferroreport.inspect(template)` returns the template's parameters, fields and the features
   the engine does not support yet.
