@@ -130,7 +130,7 @@ report written to migration.md</pre>
           difiere de JasperReports; sin esa opción, solo falla si una plantilla no carga. Úsalo en CI cuando la carpeta ya pase.</li>
         <li><code>--strict-pixels</code> (con <code>--jasper</code>) también lo hace fallar cuando una página se ve distinta a la de JasperReports (más
           del 0,15% de su tinta, comparada píxel por píxel), o cuando las páginas no se pudieron comparar porque <code>pdftoppm</code> no está en el PATH.
-          Agrégalo cuando tus plantillas ya coincidan píxel por píxel y quieras que CI lo mantenga.</li>
+          Agrégalo, junto a <code>--strict</code>, cuando tus plantillas ya coincidan píxel por píxel y quieras que CI lo mantenga.</li>
         <li><code>--to ferro --out convertidas/</code> (o <code>--to jrxml</code>) escribe además cada plantilla convertida, en las mismas
           carpetas. No hace falta para migrar: ferroreport genera el JRXML tal cual.</li>
         <li>Para una sola plantilla, <code>ferroreport doctor factura.jrxml</code> lista lo que usa y si cada parte está soportada.</li>

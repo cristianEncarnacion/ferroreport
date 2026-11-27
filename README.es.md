@@ -126,7 +126,7 @@ ferroreport render factura.jrxml --data filas.json -o factura.xlsx   # Excel (o 
 ferroreport doctor factura.jrxml     # qué soporta (y qué no) esta plantilla
 ferroreport migrate reportes/ --report migracion.md   # lo mismo para una carpeta entera
 ferroreport migrate reportes/ --jasper jasper/lib --strict   # y comparado con JasperReports
-ferroreport migrate reportes/ --jasper jasper/lib --strict-pixels   # fallando también si una página se ve distinta
+ferroreport migrate reportes/ --jasper jasper/lib --strict --strict-pixels   # fallando también si una página se ve distinta
 ferroreport convert factura.jrxml -o factura.ferro   # la misma plantilla en el formato de ferroreport
 ```
 

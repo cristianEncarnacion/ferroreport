@@ -110,7 +110,7 @@ MIGRATE:
     not supported yet, stops when rendered with no rows, or differs from JasperReports (pages,
     texts and numbers). --strict-pixels (with --jasper) also exits with 1 when a page of a
     template both engines render is a different picture, or when the pictures could not be
-    compared (no pdftoppm).
+    compared (no pdftoppm). A template one engine cannot render is left to --strict.
 
 CONVERT:
     Rewrites a template: JRXML (JasperReports 6 or 7) as a .ferro template, ferroreport's own

@@ -410,7 +410,8 @@ ferroreport render invoice.jrxml -d rows.json \
         (o <code>--to jrxml</code>, para JRXML 7) también escribe cada plantilla convertida, en las mismas carpetas. Termina con 1 cuando una
         plantilla no se puede cargar, así que puede detener un build; con <code>--strict</code> también cuando una usa algo que todavía no está soportado,
         se detiene al generarla sin filas, o difiere de JasperReports. <code>--strict-pixels</code> (con <code>--jasper</code>) también lo hace fallar
-        cuando una página de una plantilla que generan los dos motores es otra imagen, o cuando las páginas no se pudieron comparar (sin <code>pdftoppm</code>).</p>
+        cuando una página de una plantilla que generan los dos motores es otra imagen, o cuando las páginas no se pudieron comparar (sin <code>pdftoppm</code>).
+        Una plantilla que uno de los motores no puede generar queda para <code>--strict</code>.</p>
       <p>La <a href="migrate.html">guía de migración</a> lleva un proyecto de JasperReports por este proceso paso a paso.</p>
       <h3 id="migrate-jasper">Comparado con el propio JasperReports</h3>
       <p>Con <code>--jasper lib/</code>, la carpeta de tus jars de JasperReports (6 o 7, con sus dependencias, como los corre tu

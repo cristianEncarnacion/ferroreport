@@ -27,9 +27,11 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   their separators (`1.234,50` in Argentina, Colombia, Chile, Uruguay...), currency, month names
   (`setiembre` in Peru and Uruguay), short date and time (`05-07-26, 14:07` in Chile), `TIME()`
   without a pattern (a 12-hour clock in CO, VE, PA, PR, PH and US) and first day of
-  `DATERANGE("WEEK")`. `es_419` takes Java's `¤` as its currency sign, `es_US` is no longer
-  es_MX, and `es` is no longer es_ES in `REPORT_LOCALE`. Tags Java does not have still take
-  es_419's.
+  `DATERANGE("WEEK")`. `es_419` takes Java's `¤` as its currency sign and starts its weeks on
+  Monday, `es_US` is no longer es_MX, and `es` is no longer es_ES in `REPORT_LOCALE`. Spanish
+  tags Java does not have (es_XX...) now take `es`'s separators, month and day names, short date
+  and time and `TIME()`, as Java writes them, instead of es_419's, and are `es` in
+  `REPORT_LOCALE` (they were `es_419`).
 - Icon labels place their label and icon where `hAlign` and `vAlign` say (or the
   `hImageAlign` and `vImageAlign` of the element's style), as JasperReports 7 does: side by side
   as one block left, centered or right, each at the top, middle or bottom; one above the other,
@@ -77,10 +79,10 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   `<iconTextField>` straight inside the component, are drawn. They were left out, so the
   component printed nothing.
 - French number and date formats, as Java 21 has them: `fr`, `fr_FR`, `fr_BE`, `fr_CA` and
-  `fr_CH` (other `fr_` tags take fr_FR's), with their separators (a narrow no-break space
-  between groups, a no-break space in Canada), currency, month and day names, AM/PM and short
-  date and time. A currency pattern in French Switzerland takes a point as its decimal
-  separator, as Java does. Before, these locales printed `en_US`'s.
+  `fr_CH` (for the other `fr_` tags, see the French regions entry above), with their separators
+  (a narrow no-break space between groups, a no-break space in Canada), currency, month and day
+  names, AM/PM and short date and time. A currency pattern in French Switzerland takes a point as
+  its decimal separator, as Java does. Before, these locales printed `en_US`'s.
 - Website: the home page is also in Portuguese (Brazil), at `/pt/`, with PT in the EN / ES
   switch of the home pages and in their `hreflang` alternates and the sitemap; its other links
   go to the English documentation, migration guide and comparison.

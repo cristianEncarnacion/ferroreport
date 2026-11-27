@@ -61,7 +61,8 @@ pub const ES_ES: Locale =
     Locale { tag: "es_ES", decimal_separator: ',', grouping_separator: '.', currency_symbol: "€", ..ES_DO };
 
 /// Spanish without a country, as Java 21 has it: Spain's symbols with the generic currency sign
-/// `¤`, as no country says which currency, and weeks starting on Sunday.
+/// `¤`, as no country says which currency, and weeks starting on Sunday. The Spanish tags Java
+/// does not have (es_XX...) take it too, as Java formats them with `es`'s data.
 pub const ES: Locale = Locale { tag: "es", currency_symbol: "\u{A4}", ..ES_ES };
 
 /// Spanish (Ceuta and Melilla): Spain's symbols with the generic currency sign `¤`, as Java 21
@@ -72,9 +73,9 @@ pub const ES_IC: Locale = Locale { tag: "es_IC", ..ES_EA };
 /// Spanish (Equatorial Guinea): Spain's symbols and clock with the CFA franc `FCFA`.
 pub const ES_GQ: Locale = Locale { tag: "es_GQ", currency_symbol: "FCFA", ..ES_ES };
 
-/// Spanish for Latin America, and the Spanish tags Java does not have: es_DO's number symbols
-/// with the generic currency sign `¤`, and the 24-hour clock Java 21 gives it in the short date
-/// and time and in `TIME()`.
+/// Spanish for Latin America: es_DO's number symbols with the generic currency sign `¤`, the
+/// 24-hour clock Java 21 gives it in the short date and time and in `TIME()`, and weeks starting
+/// on Monday.
 pub const ES_419: Locale = Locale { tag: "es_419", currency_symbol: "\u{A4}", ..ES_DO };
 
 const ES_SETIEMBRE_MONTHS: [&str; 12] =
@@ -430,7 +431,9 @@ impl Locale {
             "es_PA" => &ES_PA,
             "es_PR" => &ES_PR,
             "es_US" => &ES_US,
-            _ if norm == "es_419" || norm.starts_with("es_") => &ES_419,
+            "es_419" => &ES_419,
+            // Java formats the Spanish tags it does not have with `es`'s data.
+            _ if norm.starts_with("es_") => &ES,
             "fr" => &FR,
             "fr_BE" => &FR_BE,
             "fr_CA" => &FR_CA,
@@ -880,8 +883,9 @@ mod tests {
         ] {
             assert_eq!(format_value(&september, Some("MMMM MMM"), Locale::from_tag(tag)), want, "{tag}");
         }
-        // Tags Java does not have take es_419's.
-        assert_eq!(Locale::from_tag("es_XX").tag, "es_419");
+        // Tags Java does not have take `es`'s, as Java formats them.
+        assert_eq!(Locale::from_tag("es_XX").tag, "es");
+        assert_eq!(Locale::from_tag("es-XX").tag, "es");
     }
 
     /// What Java 21.0.13 prints for Portuguese, for -1234567.5 and 5 July 2026 14:07:09 (the

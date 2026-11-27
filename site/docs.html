@@ -409,7 +409,8 @@ ferroreport render invoice.jrxml -d rows.json \
         (or <code>--to jrxml</code>, for JRXML 7) it also writes each template converted, in the same folders. It exits with 1 when a
         template cannot be loaded, so it can stop a build; with <code>--strict</code> also when one uses something not supported yet,
         stops when rendered with no rows, or differs from JasperReports. <code>--strict-pixels</code> (with <code>--jasper</code>) also fails it
-        when a page of a template both engines render is a different picture, or when the pages could not be compared (no <code>pdftoppm</code>).</p>
+        when a page of a template both engines render is a different picture, or when the pages could not be compared (no <code>pdftoppm</code>).
+        A template one engine cannot render is left to <code>--strict</code>.</p>
       <p>The <a href="migrate.html">migration guide</a> takes a JasperReports project through it step by step.</p>
       <h3 id="migrate-jasper">Compared with JasperReports itself</h3>
       <p>With <code>--jasper lib/</code>, the folder of your JasperReports jars (6 or 7, with their dependencies, as your application
