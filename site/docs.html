@@ -475,7 +475,7 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>POST /render</code></td><td>Renders the template sent in the request</td><td><code>application/pdf</code>, or the Excel or CSV file with <code>format</code></td></tr>
         <tr><td><code>POST /inspect</code></td><td>Reports a template's parameters, fields and unsupported features</td><td>JSON</td></tr>
         <tr><td><code>GET /health</code></td><td>For load balancers. Answers without the token</td><td><code>{"status": "ok", "version": "1.3.0"}</code></td></tr>
-        <tr><td><code>GET /metrics</code></td><td>Counters for Prometheus: renders, errors, renders stopped by a limit, renders stopped because the client left, documents sent as they rendered, time spent, pages, rows, bytes sent, template cache hits and misses, renders in flight, disk in use for documents</td><td>Prometheus text</td></tr>
+        <tr><td><code>GET /metrics</code></td><td>Counters for Prometheus: renders, errors, renders stopped by a limit, renders stopped because the client left, documents sent as they rendered, time spent, pages, rows, bytes sent, template cache hits and misses, renders in flight, disk in use for documents; render time by output format as a histogram (<code>ferroreport_render_duration_seconds</code>, with a <code>format</code> label and buckets from 5 ms to 60 s, for percentiles and alerts) and the version (<code>ferroreport_build_info</code>)</td><td>Prometheus text</td></tr>
       </table>
       <p>The request body is JSON:</p>
       <table>

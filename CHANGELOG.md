@@ -138,6 +138,9 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   render is a different picture (over 0.15% of its ink), listing each template with its worst
   page, or when the pages could not be compared (no `pdftoppm`). `--strict` and `same` do not
   change.
+- Server: `/metrics` adds `ferroreport_render_duration_seconds`, a histogram of render time
+  with a `format` label (buckets from 5 ms to 60 s), for percentiles and alerts, and
+  `ferroreport_build_info{version="..."}`. Every existing metric keeps its name and meaning.
 
 ## 1.3.0
 

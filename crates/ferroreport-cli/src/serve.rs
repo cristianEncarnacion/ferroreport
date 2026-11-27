@@ -148,6 +148,48 @@ impl TemplateCache {
     }
 }
 
+/// The formats `ferroreport_render_duration_seconds` is labelled with, by their extension.
+const FORMATS: [&str; 8] = ["pdf", "xlsx", "docx", "pptx", "ods", "odt", "csv", "html"];
+/// The upper bounds of its buckets, in seconds (`+Inf` is the last bucket).
+const BUCKETS: [f64; 13] = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0];
+
+/// A Prometheus histogram of render times per format: how many renders fell in each bucket
+/// (not cumulative; the text adds them up), their total time and their count.
+#[derive(Default)]
+struct Durations {
+    buckets: [[AtomicU64; BUCKETS.len() + 1]; FORMATS.len()],
+    micros: [AtomicU64; FORMATS.len()],
+    count: [AtomicU64; FORMATS.len()],
+}
+
+impl Durations {
+    /// Records one render of `format` that took `elapsed`.
+    fn record(&self, format: ferroreport::Format, elapsed: std::time::Duration) {
+        let Some(f) = FORMATS.iter().position(|e| *e == format.extension()) else { return };
+        let seconds = elapsed.as_secs_f64();
+        let bucket = BUCKETS.iter().position(|le| seconds <= *le).unwrap_or(BUCKETS.len());
+        self.buckets[f][bucket].fetch_add(1, Ordering::Relaxed);
+        self.micros[f].fetch_add(elapsed.as_micros() as u64, Ordering::Relaxed);
+        self.count[f].fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn text(&self, out: &mut String) {
+        let name = "ferroreport_render_duration_seconds";
+        out.push_str(&format!("# HELP {name} Time spent rendering, by output format.\n# TYPE {name} histogram\n"));
+        for (f, format) in FORMATS.iter().enumerate() {
+            let mut cumulative = 0;
+            for (i, bucket) in self.buckets[f].iter().enumerate() {
+                cumulative += bucket.load(Ordering::Relaxed);
+                let le = BUCKETS.get(i).map_or("+Inf".to_string(), |b| b.to_string());
+                out.push_str(&format!("{name}_bucket{{format=\"{format}\",le=\"{le}\"}} {cumulative}\n"));
+            }
+            let sum = self.micros[f].load(Ordering::Relaxed) as f64 / 1e6;
+            out.push_str(&format!("{name}_sum{{format=\"{format}\"}} {sum:.6}\n"));
+            out.push_str(&format!("{name}_count{{format=\"{format}\"}} {}\n", self.count[f].load(Ordering::Relaxed)));
+        }
+    }
+}
+
 /// Counters for `GET /metrics`.
 #[derive(Default)]
 pub struct Metrics {
@@ -166,6 +208,7 @@ pub struct Metrics {
     cache_hits: AtomicU64,
     cache_misses: AtomicU64,
     in_flight: AtomicU64,
+    durations: Durations,
 }
 
 impl Metrics {
@@ -246,6 +289,11 @@ impl Metrics {
             "Bytes of documents and requests kept on disk now.",
             spool.used().to_string(),
         );
+        self.durations.text(&mut out);
+        out.push_str(&format!(
+            "# HELP ferroreport_build_info The ferroreport version serving.\n# TYPE ferroreport_build_info gauge\nferroreport_build_info{{version=\"{}\"}} 1\n",
+            env!("CARGO_PKG_VERSION")
+        ));
         out
     }
 }
@@ -750,6 +798,7 @@ fn respond_streaming(state: &Arc<State>, job: Job, rows: OwnedRows) -> Result<St
         let m = &shared.metrics;
         m.in_flight.fetch_sub(1, Ordering::Relaxed);
         m.render_micros.fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+        m.durations.record(format, started.elapsed());
         match result {
             Ok(Ok(stats)) => {
                 m.renders_ok.fetch_add(1, Ordering::Relaxed);
@@ -941,6 +990,7 @@ fn answer(state: &Arc<State>, req: &mut Request, stream: &mut Option<Streamed>) 
             let result = respond_whole(state, &job, &body, if lines { Some(&mut reader) } else { None });
             m.in_flight.fetch_sub(1, Ordering::Relaxed);
             m.render_micros.fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+            m.durations.record(job.format, started.elapsed());
             match result {
                 Ok(reply) => reply,
                 Err(e) => refuse(e),
@@ -1257,6 +1307,33 @@ mod tests {
         let text = m.text(&SpoolLimits::new(0, None, 0));
         assert!(text.contains("# TYPE ferroreport_renders_total counter\nferroreport_renders_total 3\n"), "{text}");
         assert!(text.contains("ferroreport_render_seconds_total 1.500000\n"), "{text}");
+        // Render times by format, as a histogram, and the version.
+        m.durations.record(ferroreport::Format::Pdf, std::time::Duration::from_millis(3));
+        m.durations.record(ferroreport::Format::Pdf, std::time::Duration::from_millis(40));
+        m.durations.record(ferroreport::Format::Pdf, std::time::Duration::from_secs(90));
+        m.durations.record(ferroreport::Format::Xlsx, std::time::Duration::from_millis(250));
+        let text = m.text(&SpoolLimits::new(0, None, 0));
+        let name = "ferroreport_render_duration_seconds";
+        assert!(text.contains(&format!("# TYPE {name} histogram\n")), "{text}");
+        for (le, n) in [("0.005", 1), ("0.025", 1), ("0.05", 2), ("60", 2), ("+Inf", 3)] {
+            assert!(text.contains(&format!("{name}_bucket{{format=\"pdf\",le=\"{le}\"}} {n}\n")), "{le}: {text}");
+        }
+        assert!(text.contains(&format!("{name}_sum{{format=\"pdf\"}} 90.043000\n")), "{text}");
+        assert!(text.contains(&format!("{name}_count{{format=\"pdf\"}} 3\n")), "{text}");
+        // 0.25 s falls in the 0.25 bucket (le is inclusive).
+        assert!(text.contains(&format!("{name}_bucket{{format=\"xlsx\",le=\"0.1\"}} 0\n")), "{text}");
+        assert!(text.contains(&format!("{name}_bucket{{format=\"xlsx\",le=\"0.25\"}} 1\n")), "{text}");
+        assert!(text.contains(&format!("{name}_count{{format=\"html\"}} 0\n")), "{text}");
+        assert!(text.contains(&format!("ferroreport_build_info{{version=\"{}\"}} 1\n", env!("CARGO_PKG_VERSION"))), "{text}");
+        // The metrics that were there keep their names.
+        for kept in [
+            "ferroreport_renders_total",
+            "ferroreport_render_seconds_total",
+            "ferroreport_pages_total",
+            "ferroreport_renders_in_flight",
+        ] {
+            assert!(text.contains(&format!("# TYPE {kept} ")), "{kept}");
+        }
     }
 
     #[test]
