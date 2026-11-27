@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- examples/bank-statement/report.jrxml in JRXML 6, so that JasperReports 6.20.6 (tools/compare.py)
+     can render it: it comes out the same as the example, and the same as JasperReports. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" name="BankStatement" pageWidth="595" pageHeight="842" columnWidth="535" leftMargin="30" rightMargin="30" topMargin="30" bottomMargin="30">
+	<style name="Base" isDefault="true" fontName="DejaVu Sans" fontSize="8.0" />
+	<style name="Bold" style="Base" isBold="true" />
+	<style name="Amount" style="Base" hTextAlign="Right" pattern="#,##0.00" />
+	<style name="Head" style="Bold" forecolor="#FFFFFF" backcolor="#1F3A5F" mode="Opaque" vTextAlign="Middle">
+		<box leftPadding="4" rightPadding="4" />
+	</style>
+	<parameter name="Bank" class="java.lang.String" />
+	<parameter name="BankAddress" class="java.lang.String" />
+	<parameter name="Holder" class="java.lang.String" />
+	<parameter name="HolderAddress" class="java.lang.String" />
+	<parameter name="Account" class="java.lang.String" />
+	<parameter name="Currency" class="java.lang.String" />
+	<parameter name="From" class="java.util.Date" />
+	<parameter name="To" class="java.util.Date" />
+	<parameter name="OpeningBalance" class="java.lang.Double" />
+	<field name="date" class="java.util.Date" />
+	<field name="description" class="java.lang.String" />
+	<field name="reference" class="java.lang.String" />
+	<field name="amount" class="java.lang.Double" />
+	<variable name="Movement" class="java.lang.Double" calculation="Sum">
+		<variableExpression>$F{amount}</variableExpression>
+	</variable>
+	<variable name="Debits" class="java.lang.Double" calculation="Sum">
+		<variableExpression>$F{amount} &lt; 0 ? -$F{amount} : 0.0</variableExpression>
+	</variable>
+	<variable name="Credits" class="java.lang.Double" calculation="Sum">
+		<variableExpression>$F{amount} &gt; 0 ? $F{amount} : 0.0</variableExpression>
+	</variable>
+	<variable name="MonthDebits" class="java.lang.Double" resetType="Group" resetGroup="Month" calculation="Sum">
+		<variableExpression>$F{amount} &lt; 0 ? -$F{amount} : 0.0</variableExpression>
+	</variable>
+	<variable name="MonthCredits" class="java.lang.Double" resetType="Group" resetGroup="Month" calculation="Sum">
+		<variableExpression>$F{amount} &gt; 0 ? $F{amount} : 0.0</variableExpression>
+	</variable>
+	<variable name="MonthCount" class="java.lang.Integer" resetType="Group" resetGroup="Month" calculation="Count">
+		<variableExpression>$F{date}</variableExpression>
+	</variable>
+	<group name="Month">
+		<groupExpression>new java.text.SimpleDateFormat("yyyy-MM").format($F{date})</groupExpression>
+		<groupHeader>
+			<band height="22">
+				<textField>
+					<reportElement x="0" y="6" width="535" height="14" style="Bold" forecolor="#1F3A5F" />
+					<textElement>
+						<font size="9.0" />
+					</textElement>
+					<textFieldExpression>new java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.US).format($F{date})</textFieldExpression>
+				</textField>
+				<line>
+					<reportElement x="0" y="21" width="535" height="1" forecolor="#1F3A5F" />
+				</line>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="22">
+				<line>
+					<reportElement x="0" y="1" width="535" height="1" forecolor="#A0A0A0" />
+				</line>
+				<textField>
+					<reportElement x="0" y="4" width="295" height="14" style="Bold" />
+					<textElement />
+					<textFieldExpression>"Total for " + new java.text.SimpleDateFormat("MMMM", java.util.Locale.US).format($F{date}) + " (" + $V{MonthCount} + " movements)"</textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement x="295" y="4" width="80" height="14" style="Amount" />
+					<textElement>
+						<font isBold="true" />
+					</textElement>
+					<textFieldExpression>$V{MonthDebits}</textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement x="375" y="4" width="80" height="14" style="Amount" />
+					<textElement>
+						<font isBold="true" />
+					</textElement>
+					<textFieldExpression>$V{MonthCredits}</textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement x="455" y="4" width="80" height="14" style="Amount" />
+					<textElement>
+						<font isBold="true" />
+					</textElement>
+					<textFieldExpression>$P{OpeningBalance} + $V{Movement}</textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<title>
+		<band height="150">
+			<rectangle>
+				<reportElement x="0" y="0" width="535" height="44" forecolor="#1F3A5F" backcolor="#1F3A5F" />
+			</rectangle>
+			<textField>
+				<reportElement x="10" y="6" width="300" height="20" forecolor="#FFFFFF" />
+				<textElement>
+					<font size="14.0" isBold="true" />
+				</textElement>
+				<textFieldExpression>$P{Bank}</textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="10" y="26" width="300" height="12" forecolor="#D0DCEA" />
+				<textElement />
+				<textFieldExpression>$P{BankAddress}</textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="315" y="10" width="210" height="24" forecolor="#FFFFFF" />
+				<textElement textAlignment="Right">
+					<font size="16.0" />
+				</textElement>
+				<text>Account statement</text>
+			</staticText>
+			<textField>
+				<reportElement x="0" y="56" width="260" height="14" style="Bold" />
+				<textElement>
+					<font size="10.0" />
+				</textElement>
+				<textFieldExpression>$P{Holder}</textFieldExpression>
+			</textField>
+			<textField textAdjust="StretchHeight">
+				<reportElement x="0" y="70" width="260" height="36" />
+				<textElement />
+				<textFieldExpression>$P{HolderAddress}</textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="300" y="54" width="235" height="56" />
+				<box>
+					<pen lineWidth="0.5" lineColor="#A0A0A0" />
+				</box>
+				<staticText>
+					<reportElement x="6" y="4" width="80" height="12" forecolor="#606060" />
+					<textElement />
+					<text>Account</text>
+				</staticText>
+				<textField>
+					<reportElement x="86" y="4" width="143" height="12" />
+					<textElement textAlignment="Right" />
+					<textFieldExpression>$P{Account}</textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement x="6" y="17" width="80" height="12" forecolor="#606060" />
+					<textElement />
+					<text>Currency</text>
+				</staticText>
+				<textField>
+					<reportElement x="86" y="17" width="143" height="12" />
+					<textElement textAlignment="Right" />
+					<textFieldExpression>$P{Currency}</textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement x="6" y="30" width="80" height="12" forecolor="#606060" />
+					<textElement />
+					<text>Period</text>
+				</staticText>
+				<textField>
+					<reportElement x="86" y="30" width="143" height="12" />
+					<textElement textAlignment="Right" />
+					<textFieldExpression>new java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US).format($P{From}) + " – " + new java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US).format($P{To})</textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement x="6" y="43" width="80" height="12" forecolor="#606060" />
+					<textElement />
+					<text>Opening balance</text>
+				</staticText>
+				<textField>
+					<reportElement x="86" y="43" width="143" height="12" style="Amount" />
+					<textElement>
+						<font isBold="true" />
+					</textElement>
+					<textFieldExpression>$P{OpeningBalance}</textFieldExpression>
+				</textField>
+			</frame>
+			<staticText>
+				<reportElement x="0" y="124" width="535" height="20" style="Bold" forecolor="#1F3A5F" />
+				<textElement>
+					<font size="11.0" />
+				</textElement>
+				<text>Movements</text>
+			</staticText>
+		</band>
+	</title>
+	<columnHeader>
+		<band height="18">
+			<staticText>
+				<reportElement x="0" y="0" width="60" height="18" style="Head" />
+				<textElement />
+				<text>Date</text>
+			</staticText>
+			<staticText>
+				<reportElement x="60" y="0" width="165" height="18" style="Head" />
+				<textElement />
+				<text>Description</text>
+			</staticText>
+			<staticText>
+				<reportElement x="225" y="0" width="70" height="18" style="Head" />
+				<textElement />
+				<text>Reference</text>
+			</staticText>
+			<staticText>
+				<reportElement x="295" y="0" width="80" height="18" style="Head" />
+				<textElement textAlignment="Right" />
+				<text>Debit</text>
+			</staticText>
+			<staticText>
+				<reportElement x="375" y="0" width="80" height="18" style="Head" />
+				<textElement textAlignment="Right" />
+				<text>Credit</text>
+			</staticText>
+			<staticText>
+				<reportElement x="455" y="0" width="80" height="18" style="Head" />
+				<textElement textAlignment="Right" />
+				<text>Balance</text>
+			</staticText>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="16">
+			<rectangle>
+				<reportElement x="0" y="0" width="535" height="16" forecolor="#F2F5F9" backcolor="#F2F5F9">
+					<printWhenExpression>$V{MonthCount} % 2 == 0</printWhenExpression>
+				</reportElement>
+			</rectangle>
+			<textField pattern="MMM dd">
+				<reportElement x="0" y="0" width="60" height="16" />
+				<box leftPadding="4" />
+				<textElement verticalAlignment="Middle" />
+				<textFieldExpression>$F{date}</textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="60" y="0" width="165" height="16" />
+				<box leftPadding="4" />
+				<textElement verticalAlignment="Middle" />
+				<textFieldExpression>$F{description}</textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="225" y="0" width="70" height="16" forecolor="#606060" />
+				<box leftPadding="4" />
+				<textElement verticalAlignment="Middle" />
+				<textFieldExpression>$F{reference}</textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="295" y="0" width="80" height="16" style="Amount" forecolor="#B00020" />
+				<box rightPadding="4" />
+				<textElement verticalAlignment="Middle" />
+				<textFieldExpression>$F{amount} &lt; 0 ? -$F{amount} : null</textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="375" y="0" width="80" height="16" style="Amount" forecolor="#1B7F3B" />
+				<box rightPadding="4" />
+				<textElement verticalAlignment="Middle" />
+				<textFieldExpression>$F{amount} &gt; 0 ? $F{amount} : null</textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="455" y="0" width="80" height="16" style="Amount" />
+				<box rightPadding="4" />
+				<textElement verticalAlignment="Middle" />
+				<textFieldExpression>$P{OpeningBalance} + $V{Movement}</textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<pageFooter>
+		<band height="24">
+			<line>
+				<reportElement x="0" y="4" width="535" height="1" forecolor="#A0A0A0" />
+			</line>
+			<textField>
+				<reportElement x="0" y="8" width="300" height="12" forecolor="#606060" />
+				<textElement />
+				<textFieldExpression>$P{Bank} + " · " + $P{Account}</textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="335" y="8" width="160" height="12" forecolor="#606060" />
+				<textElement textAlignment="Right" />
+				<textFieldExpression>"Page " + $V{PAGE_NUMBER} + " of"</textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement x="495" y="8" width="40" height="12" forecolor="#606060" />
+				<textElement />
+				<textFieldExpression>" " + $V{PAGE_NUMBER}</textFieldExpression>
+			</textField>
+		</band>
+	</pageFooter>
+	<summary>
+		<band height="110">
+			<frame>
+				<reportElement x="275" y="14" width="260" height="76" />
+				<box>
+					<pen lineWidth="0.5" lineColor="#1F3A5F" />
+				</box>
+				<staticText>
+					<reportElement x="8" y="6" width="140" height="14" />
+					<textElement />
+					<text>Opening balance</text>
+				</staticText>
+				<textField>
+					<reportElement x="148" y="6" width="104" height="14" style="Amount" />
+					<textElement />
+					<textFieldExpression>$P{OpeningBalance}</textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement x="8" y="20" width="140" height="14" />
+					<textElement />
+					<text>Total debits</text>
+				</staticText>
+				<textField>
+					<reportElement x="148" y="20" width="104" height="14" style="Amount" forecolor="#B00020" />
+					<textElement />
+					<textFieldExpression>-$V{Debits}</textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement x="8" y="34" width="140" height="14" />
+					<textElement />
+					<text>Total credits</text>
+				</staticText>
+				<textField>
+					<reportElement x="148" y="34" width="104" height="14" style="Amount" forecolor="#1B7F3B" />
+					<textElement />
+					<textFieldExpression>$V{Credits}</textFieldExpression>
+				</textField>
+				<line>
+					<reportElement x="8" y="51" width="244" height="1" forecolor="#1F3A5F" />
+				</line>
+				<staticText>
+					<reportElement x="8" y="56" width="140" height="14" style="Bold" />
+					<textElement>
+						<font size="9.0" />
+					</textElement>
+					<text>Closing balance</text>
+				</staticText>
+				<textField>
+					<reportElement x="148" y="56" width="104" height="14" style="Amount" />
+					<textElement>
+						<font size="9.0" isBold="true" />
+					</textElement>
+					<textFieldExpression>$P{OpeningBalance} + $V{Movement}</textFieldExpression>
+				</textField>
+			</frame>
+			<textField textAdjust="StretchHeight">
+				<reportElement x="0" y="14" width="260" height="76" forecolor="#606060" />
+				<textElement>
+					<font size="7.0" />
+				</textElement>
+				<textFieldExpression>"Please check this statement and tell us of any difference within 30 days of " + new java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.US).format($P{To}) + ". " + $V{REPORT_COUNT} + " movements in the period."</textFieldExpression>
+			</textField>
+		</band>
+	</summary>
+</jasperReport>

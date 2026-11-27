@@ -153,6 +153,9 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 - Server: `/metrics` adds `ferroreport_render_duration_seconds`, a histogram of render time
   with a `format` label (buckets from 5 ms to 60 s), for percentiles and alerts, and
   `ferroreport_build_info{version="..."}`. Every existing metric keeps its name and meaning.
+- Tests: the bank statement example is also a fixture (`fixtures/65-bank-statement`, in JRXML 6),
+  so CI keeps its page count and `tools/compare.py` compares it with JasperReports 6.20.6, which
+  renders it the same, pixel for pixel.
 
 ## 1.3.0
 
