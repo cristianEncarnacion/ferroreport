@@ -59,6 +59,44 @@ def diff_page(a: np.ndarray, b: np.ndarray, out: Path) -> float:
     return float(share)
 
 
+NOW = "2026-01-15T10:30:00"  # the value of `new Date()` in every comparison
+
+
+def fixture_args(fx: Path, out: Path) -> list:
+    """The options `ferroreport render` takes for fixture `fx` (besides the template, output,
+    -q and --now): its rows, parameters, fonts, font sets and resources. A fixture filled from a
+    database (data.sql) gets a SQLite database built in `out`."""
+    args = []
+    data, params = fx / "data.json", fx / "params.json"
+    if data.exists():
+        args += ["-d", str(data)]
+    if (fx / "data.sql").exists():
+        # Filled from its own query, on a SQLite database built from data.sql.
+        import sqlite3
+        db = out / "data.sqlite"
+        db.unlink(missing_ok=True)
+        with sqlite3.connect(db) as c:
+            c.executescript((fx / "data.sql").read_text())
+        args += ["--db", f"sqlite:{db}"]
+    if params.exists():
+        args += ["-p", str(params)]
+    # Fonts the fixture needs (fonts.txt: Family=file.ttf[:bold][:italic]), when installed.
+    if (fx / "fonts.txt").exists():
+        for spec in (fx / "fonts.txt").read_text().split():
+            if Path(spec.split("=", 1)[-1].split(":")[0]).exists():
+                args += ["--font", spec]
+    # The fixture's font extension is read from a resource folder, as Jasper reads it
+    # from its class path.
+    if (fx / "jasper-extension").is_dir():
+        args += ["-r", str(fx / "jasper-extension")]
+    # Font sets the fixture defines (fontsets.txt: Name=Family,Family per line).
+    if (fx / "fontsets.txt").exists():
+        for spec in (fx / "fontsets.txt").read_text().splitlines():
+            if spec.strip():
+                args += ["--font-set", spec.strip()]
+    return args
+
+
 def run(cmd: list, cwd=None, env=None) -> tuple:
     t0 = time.perf_counter()
     p = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
@@ -103,33 +141,8 @@ def main() -> int:
         if (fx / "jasper-extension").is_dir():
             env["ORACLE_CLASSPATH"] = str(fx / "jasper-extension")
         pj, tj = run(cmd, cwd=fx, env=env) if not (fx / "data.sql").exists() else (None, 0.0)
-        cmd = [args.bin, "render", str(fx / "report.jrxml"), "-o", str(ours_pdf), "-q", "--now", "2026-01-15T10:30:00"]
-        if data.exists():
-            cmd += ["-d", str(data)]
-        if (fx / "data.sql").exists():
-            # Filled from its own query, on a SQLite database built from data.sql.
-            import sqlite3
-            db = out / "data.sqlite"
-            with sqlite3.connect(db) as c:
-                c.executescript((fx / "data.sql").read_text())
-            cmd += ["--db", f"sqlite:{db}"]
-        if params.exists():
-            cmd += ["-p", str(params)]
-        # Fonts the fixture needs (fonts.txt: Family=file.ttf[:bold][:italic]), when installed.
-        if (fx / "fonts.txt").exists():
-            for spec in (fx / "fonts.txt").read_text().split():
-                if Path(spec.split("=", 1)[-1].split(":")[0]).exists():
-                    cmd += ["--font", spec]
-        # The fixture's font extension is read from a resource folder, as Jasper reads it
-        # from its class path.
-        if (fx / "jasper-extension").is_dir():
-            cmd += ["-r", str(fx / "jasper-extension")]
-        # Font sets the fixture defines (fontsets.txt: Name=Family,Family per line).
-        if (fx / "fontsets.txt").exists():
-            for spec in (fx / "fontsets.txt").read_text().splitlines():
-                if spec.strip():
-                    cmd += ["--font-set", spec.strip()]
-        po, to = run(cmd)
+        cmd = [args.bin, "render", str(fx / "report.jrxml"), "-o", str(ours_pdf), "-q", "--now", NOW]
+        po, to = run(cmd + fixture_args(fx, out))
 
         row = {"fixture": fx.name, "jasper_s": round(tj, 3), "ferroreport_s": round(to, 4)}
         skip_note = fx / "ORACLE-SKIP"

@@ -31,6 +31,7 @@ fixtures/<name>/         report.jrxml, data.json, params.json (optional), expect
                          and fontsets.txt (--font, --font-set), jasper-extension/ (the same
                          font sets for the reference run)
 tools/compare.py         pixel comparison against JasperReports
+tools/compat.py          what changed since the previous release (pages, pixels, CSV)
 tools/compare_sheets.py  cell comparison of the Excel and CSV exports
 tools/bench.py           speed and memory of one fixture, cold
 tools/bench_all.py       every number in the README: cold, warm JVM, each output format,
@@ -63,6 +64,27 @@ JASPER_LIB=/path/to/jars python3 tools/compare.py --only 02  # one fixture
 Results and diff images (red: only in Jasper, blue: only in ferroreport) are written to
 `target/compare/`. When a new fixture matches, record its page count in `expected.json` so
 `cargo test` keeps it from regressing.
+
+## Comparing with the previous release
+
+Within 1.x the output may only move closer to JasperReports (Stability in the README).
+`tools/compat.py` shows what a change prints differently from a release: every fixture and
+example is rendered by both, and their pages (pixel by pixel, as `tools/compare.py`), page
+counts and CSV text compared (`--xlsx` adds the workbooks). It needs `pdftoppm` (poppler) and
+Python with numpy and Pillow, not Java.
+
+```bash
+cargo build --release
+python3 tools/compat.py --old 1.3.0                 # the release, downloaded and checked against SHA256SUMS
+python3 tools/compat.py --old path/to/ferroreport   # or any other build
+```
+
+It writes `target/compat/report.md`, one row per template (the same, or changed: the worst
+page's share and the first CSV difference), and a diff picture of each page that changed
+(red: only in the old output, blue: only in the new one). `--strict` exits with 1 when anything
+changed. CI runs it on every pull request against the latest release, without failing: the
+report is in the job summary and the `compat` artifact. Every change it lists should be one the
+pull request means, with its line in `CHANGELOG.md`.
 
 ## Adding a fixture
 

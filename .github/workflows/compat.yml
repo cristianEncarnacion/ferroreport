@@ -1,0 +1,40 @@
+name: Compatibility
+
+# What a pull request changes in the output since the latest release (tools/compat.py): every
+# fixture and example rendered by both, pages compared pixel by pixel, CSV as text and the XLSX
+# workbooks part by part. Changes are often intended, so this never fails the pull request: the
+# report is for the reviewer (in the job summary, and with the diff pictures in the `compat`
+# artifact), and what changed belongs in CHANGELOG.md.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p ferroreport-cli
+      # pdftoppm draws the pages; the Devanagari and Thai fixtures are set in GNU FreeSerif
+      # (fixtures/*/fonts.txt).
+      - run: sudo apt-get install -y -q poppler-utils fonts-freefont-ttf > /dev/null
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q numpy pillow
+      # The latest release, looked up on every run, so the comparison is always with the
+      # version people have, without a pin to update at each release.
+      - name: Compare with the latest release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh release view --repo cristianEncarnacion/ferroreport --json tagName -q .tagName)
+          python3 tools/compat.py --old "$LATEST" --xlsx
+          cat target/compat/report.md >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: compat
+          path: target/compat

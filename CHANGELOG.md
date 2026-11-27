@@ -12,6 +12,12 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   the message the client was sent. Never the token, the body, parameter values or rows. Every
   response carries `X-Request-Id` (the request's own when it is printable ASCII of 128
   characters or fewer, or a new one). `--access-log` alone prints the same line as before.
+- Tools: `tools/compat.py` lists what the output changes since a previous release (`--old 1.3.0`,
+  downloaded from GitHub Releases and checked against its `SHA256SUMS`, or `--old` a binary):
+  every fixture and example rendered by both, page counts, pixels (as `tools/compare.py`) and
+  CSV text compared, in `target/compat/report.md` with a diff picture of every page that
+  changed; `--strict` fails on any change. Pull requests run it against the latest release, for
+  the reviewer, without failing.
 - JasperReports' own samples measured again (`docs/samples*.json`, README): 76 of the 101
   comparable 7.1.1 templates come out the same (74 before) and 42 of the 88 6.20.6 ones (41
   before); the subreport MasterReport sample is the same in both, and the 7.1.1 thermometer

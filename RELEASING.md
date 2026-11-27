@@ -8,7 +8,12 @@
    `site/docs.html`, `site/migrate.html` and the Java snippet of `site/index.html` (each also
    under `site/es/`), "the current one" in `site/compare.html` and `site/es/compare.html`,
    `site/llms.txt`, and the `version` of the JSON-LD in both `index.html`.
-2. Commit, then tag and push: `git tag v1.0.0 && git push origin v1.0.0` (or publish a release
+2. Check what the release changes in the output: `cargo build --release && python3 tools/compat.py
+   --old <previous version>` (see CONTRIBUTING.md). Every template `target/compat/report.md`
+   lists as changed should be explained under `## Unreleased` in `CHANGELOG.md`, which becomes
+   the release's section; within 1.x a change may only bring the output closer to
+   JasperReports.
+3. Commit, then tag and push: `git tag v1.0.0 && git push origin v1.0.0` (or publish a release
    with a new tag on GitHub).
 
 The [release workflow](.github/workflows/release.yml) then publishes:
