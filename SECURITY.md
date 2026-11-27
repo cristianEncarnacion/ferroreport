@@ -99,9 +99,10 @@ path, `GET /metrics` included, needs it.
 
 The access log (`--access-log`, plain or `json`) holds the method, the path without its query,
 the status, the time, the request ID and, for a render, the template's name, the format and how
-many pages, rows and bytes came out, and the error message the client was sent. It never holds
-the token, the request body, parameter values or rows. An error message can quote a template
-name or a field name from the request. A client's `X-Request-Id` is kept only when it is
+many pages, rows and bytes came out, and the error message the client was sent (its first 300
+characters). It never holds the token, the request body, parameter values or rows, except that
+an error message can quote the value that could not be read (`cannot convert ... to ...`), and
+it can quote a template name or a field name from the request. A client's `X-Request-Id` is kept only when it is
 printable ASCII of 128 characters or fewer, so it cannot break a log line or a header.
 
 Every render runs under `--timeout` (60 seconds unless you change it), `--max-pages` and

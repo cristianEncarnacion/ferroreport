@@ -513,9 +513,10 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>time</code>, <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>ms</code></td><td>Siempre</td><td>Cuándo llegó la petición (RFC 3339, UTC), su ID, el método, la ruta sin la consulta, el estado y los milisegundos que tomó</td></tr>
         <tr><td><code>template</code>, <code>format</code>, <code>streamed</code></td><td>Una generación</td><td>El nombre para <code>/render/&lt;name&gt;</code> (o <code>templateName</code>), <code>inline</code> para una plantilla en el cuerpo; el formato; si se envió mientras se generaba</td></tr>
         <tr><td><code>pages</code>, <code>rows</code>, <code>bytes</code></td><td>Una generación que terminó</td><td>Páginas y filas llenadas, bytes del documento enviados (<code>bytes</code> también para un documento enviado mientras se generaba que quedó incompleto)</td></tr>
-        <tr><td><code>error</code></td><td>Un error</td><td>El mensaje que se le envió al cliente</td></tr>
+        <tr><td><code>error</code></td><td>Un error</td><td>El mensaje que se le envió al cliente, sus primeros 300 caracteres</td></tr>
       </table>
-      <p>La línea nunca lleva el token, el cuerpo de la petición, los valores de los parámetros ni las filas. Sin <code>json</code>, la línea es
+      <p>La línea nunca lleva el token, el cuerpo de la petición, los valores de los parámetros ni las filas, salvo que un mensaje de
+        error puede citar el valor que no se pudo leer. Sin <code>json</code>, la línea es
         la que <code>--access-log</code> ha impreso siempre: <code>POST /render/invoice 200 109.2ms</code>.</p>
 <pre data-lang="shell"># curl
 curl -X POST localhost:8080/render/invoice \

@@ -7,7 +7,19 @@ name: Compatibility
 # artifact), and what changed belongs in CHANGELOG.md.
 on:
   pull_request:
+    # Pages and documentation do not change the output.
+    paths-ignore:
+      - "site/**"
+      - "**.md"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces the run in progress.
+concurrency:
+  group: compat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   compat:
@@ -18,7 +30,9 @@ jobs:
       - run: cargo build --release -p ferroreport-cli
       # pdftoppm draws the pages; the Devanagari and Thai fixtures are set in GNU FreeSerif
       # (fixtures/*/fonts.txt).
-      - run: sudo apt-get install -y -q poppler-utils fonts-freefont-ttf > /dev/null
+      - run: |
+          sudo apt-get update -q > /dev/null
+          sudo apt-get install -y -q poppler-utils fonts-freefont-ttf > /dev/null
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -38,3 +52,4 @@ jobs:
         with:
           name: compat
           path: target/compat
+          retention-days: 14

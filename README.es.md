@@ -109,7 +109,8 @@ mitad del tamaño de un JRXML y accesible por defecto. Frente al propio JasperRe
   cliente se va, el reporte se detiene). Toda respuesta lleva `X-Request-Id` (el del cliente o
   uno nuevo), y `--access-log json` (o `FERROREPORT_ACCESS_LOG=json`) imprime una línea JSON
   por petición para plataformas de logs: el ID, el estado y el tiempo, la plantilla, el formato,
-  las páginas, filas y bytes, y el error; nunca el token, el cuerpo ni los datos.
+  las páginas, filas y bytes, y el error. Nunca lleva el token, el cuerpo, los valores de los
+  parámetros ni las filas, salvo que un mensaje de error puede citar el valor que no se pudo leer.
   [Los campos](https://cristianencarnacion.github.io/ferroreport/es/docs.html#http-log).
 - **Java:** la dependencia `io.github.cristianencarnacion:ferroreport:1.3.0` de Maven Central
   (Java 11 o más nuevo, sin dependencias ni JasperReports) y

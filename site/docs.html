@@ -512,9 +512,10 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>time</code>, <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>ms</code></td><td>Always</td><td>When the request arrived (RFC 3339, UTC), its ID, the method, the path without the query, the status and the milliseconds it took</td></tr>
         <tr><td><code>template</code>, <code>format</code>, <code>streamed</code></td><td>A render</td><td>The name for <code>/render/&lt;name&gt;</code> (or <code>templateName</code>), <code>inline</code> for a template in the body; the format; whether it was sent as it rendered</td></tr>
         <tr><td><code>pages</code>, <code>rows</code>, <code>bytes</code></td><td>A render that finished</td><td>Pages and rows filled, bytes of the document sent (<code>bytes</code> also for a streamed document cut short)</td></tr>
-        <tr><td><code>error</code></td><td>An error</td><td>The message the client was sent</td></tr>
+        <tr><td><code>error</code></td><td>An error</td><td>The message the client was sent, its first 300 characters</td></tr>
       </table>
-      <p>The line never holds the token, the request body, parameter values or rows. Without <code>json</code>, the line is the one
+      <p>The line never holds the token, the request body, parameter values or rows, except that an error message can quote the
+        value that could not be read. Without <code>json</code>, the line is the one
         <code>--access-log</code> has always printed: <code>POST /render/invoice 200 109.2ms</code>.</p>
 <pre data-lang="shell"># curl
 curl -X POST localhost:8080/render/invoice \

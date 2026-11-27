@@ -155,7 +155,8 @@ PowerPoint, OpenDocument, CSV or a web preview):
                                 status and time; with json (or FERROREPORT_ACCESS_LOG=json), one
                                 JSON object per line that also has the time, the request ID, the
                                 template, format, pages, rows and bytes, and the error. Never the
-                                token, the body, parameter values or rows
+                                token, the body, parameter values or rows, except that an error
+                                message can quote the value that could not be read
     GET /health answers without a token; GET /metrics gives counters for Prometheus. Every
     response carries X-Request-Id: the request's own (printable ASCII, 128 characters at most)
     or a new one.

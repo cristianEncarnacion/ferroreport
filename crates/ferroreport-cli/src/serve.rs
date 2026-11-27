@@ -63,6 +63,10 @@ pub struct Config {
     pub signature: Option<ferroreport::sign::Signature>,
 }
 
+/// Most characters of an error message in the access log and in the trailer of a stream cut
+/// short: a message can quote a value from the request (`cannot convert ... to ...`).
+const MAX_ERROR_CHARS: usize = 300;
+
 /// How `--access-log` prints its line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccessLog {
@@ -81,8 +85,9 @@ impl AccessLog {
         }
     }
 
-    /// The line for one request. Never the token, the body, parameter values or rows: only
-    /// what is in `request` and `log`.
+    /// The line for one request. Never the token, the body, parameter values or rows, except
+    /// that an error message can quote the value that could not be read (cut at
+    /// `MAX_ERROR_CHARS`, as the stream trailer is): only what is in `entry` and `notes`.
     fn line(self, entry: &Entry, notes: &Notes) -> String {
         let Entry { time, id, method, path, status, ms } = entry;
         if self == AccessLog::Text {
@@ -114,7 +119,8 @@ impl AccessLog {
             fields.push(("streamed", notes.streamed.into()));
         }
         if let Some(error) = &notes.error {
-            fields.push(("error", error.as_str().into()));
+            let error: String = error.chars().take(MAX_ERROR_CHARS).collect();
+            fields.push(("error", error.into()));
         }
         // By hand rather than through a map, to keep the fields in this order.
         let body: Vec<String> = fields.iter().map(|(k, v)| format!("\"{k}\":{v}")).collect();
@@ -844,7 +850,7 @@ impl Streamed {
                 }
                 Ok(Piece::Done(stats)) => sent.stats = Some(stats),
                 Ok(Piece::Failed(_, message)) => {
-                    let said: String = message.chars().filter(|c| !c.is_control()).take(300).collect();
+                    let said: String = message.chars().filter(|c| !c.is_control()).take(MAX_ERROR_CHARS).collect();
                     let _ = write!(out, "incomplete: {said}\r\n");
                     let _ = out.flush();
                     sent.error = Some(message);
@@ -1575,6 +1581,10 @@ mod tests {
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, ["error", "method", "ms", "path", "request_id", "status", "time"]);
         assert_eq!(v["error"], "bad \"x\"\nline two");
+        // A long error, which can quote a value from the request, is cut.
+        let notes = Notes { error: Some(format!("cannot convert {} to Integer", "9".repeat(1000))), ..Notes::default() };
+        let v: serde_json::Value = serde_json::from_str(&AccessLog::Json.line(&missing, &notes)).unwrap();
+        assert_eq!(v["error"].as_str().unwrap().chars().count(), MAX_ERROR_CHARS);
 
         // Without json, the line it has always been.
         assert_eq!(AccessLog::Text.line(&missing, &notes), "POST /nope 404 12.3ms");
