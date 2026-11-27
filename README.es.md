@@ -71,7 +71,7 @@ mitad del tamaño de un JRXML y accesible por defecto. Frente al propio JasperRe
   (CVE-2025-10492, CVE-2026-6009). ferroreport nunca deserializa objetos e interpreta las
   expresiones con una lista cerrada de operaciones: sin reflexión, sin carga de clases, sin
   acceso a la red. Las imágenes y subreportes solo se leen de las carpetas de recursos de la
-  plantilla, y hay límites de anidamiento, tamaño de imagen, subreportes, páginas y tiempo
+  plantilla, y hay límites de anidamiento, tamaño de imagen, subreportes, páginas, filas y tiempo
   para que una plantilla hostil no agote la memoria ni el procesador. En cada cambio, las
   plantillas de prueba se dañan de miles de formas y el motor debe responder con un documento
   o un error, nunca caerse ([SECURITY.md](SECURITY.md)).
@@ -133,7 +133,9 @@ ferroreport convert factura.jrxml -o factura.ferro   # la misma plantilla en el 
 `filas.json` es un arreglo JSON de objetos, o un objeto JSON por línea, cuyas claves coinciden
 con los `<field>` de la plantilla. El archivo se lee a medida que el reporte lo necesita y cada
 página se escribe apenas se termina, así que puede ser mucho más grande que la memoria;
-`--max-pages` y `--timeout` detienen un reporte que crece más de lo esperado. Los valores se convierten a la clase que declara cada campo (`BigDecimal`, fechas
+`--max-pages`, `--max-rows` y `--timeout` detienen un reporte que crece más de lo esperado
+(`--max-rows` cuenta también las filas de subreportes y datasets, y detiene un resumen sobre un
+millón de filas, que imprime una sola página). Los valores se convierten a la clase que declara cada campo (`BigDecimal`, fechas
 ISO-8601 a `java.util.Date`, arreglos anidados a `java.util.List`, base64 a `byte[]`, etc.).
 
 Las imágenes y subreportes se buscan junto a la plantilla (agrega más carpetas con

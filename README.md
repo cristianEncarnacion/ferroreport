@@ -129,7 +129,7 @@ curl -X POST localhost:8080/render/invoice -H 'Authorization: Bearer change-me' 
 load balancers and `GET /metrics` for Prometheus. The server will not listen beyond localhost
 without a token (`FERROREPORT_TOKEN`), unless you say the port is private
 (`FERROREPORT_ALLOW_ANONYMOUS=1`); `--rate-limit` caps the requests per minute of one client. Templates are parsed once and cached, and every render runs under a time limit (60 s
-unless you change `--timeout`) and, if you set `--max-pages`, a page limit.
+unless you change `--timeout`) and, if you set them, a page limit (`--max-pages`) and a row limit (`--max-rows`).
 
 For reports with more rows than you want in memory, send them one per line
 (`Content-Type: application/x-ndjson`: the request on the first line, a row on each line after
@@ -162,8 +162,9 @@ ferroreport convert invoice.jrxml -o invoice.ferro   # the same template in ferr
 `rows.json` is a JSON array of objects, or one JSON object per line, whose keys match the
 template's `<field>` names (dotted names such as `customer.name` reach into nested objects).
 The file is read as the report needs it and each page is written as it is finished, so it can
-be far larger than memory; `--max-pages` and `--timeout` stop a report that grows past what
-you expect. Values are converted to the
+be far larger than memory; `--max-pages`, `--max-rows` and `--timeout` stop a report that grows
+past what you expect (`--max-rows` counts the rows of subreports and datasets too, and stops a
+summary over a million rows, which prints a single page). Values are converted to the
 class each field declares (`java.math.BigDecimal`, `java.util.Date` from ISO-8601 strings,
 `java.util.List` from nested arrays, `byte[]` from base64, ...).
 

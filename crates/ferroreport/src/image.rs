@@ -55,6 +55,10 @@ pub struct ImageStore {
     pub(crate) skip_cells: bool,
     /// When the current render must be done, and the time it was given.
     pub(crate) deadline: Option<(std::time::Instant, std::time::Duration)>,
+    /// Most rows the current render may read, all its subreports and datasets together.
+    pub(crate) max_rows: Option<usize>,
+    /// Rows the current render has read so far.
+    pub(crate) rows_read: usize,
     /// The database subreports and datasets with a connection get their rows from.
     pub(crate) connection: Option<crate::sql::Shared>,
 }

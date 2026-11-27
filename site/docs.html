@@ -371,6 +371,7 @@ ferroreport serve [options]</pre>
         <tr><td><code>--owner-password &lt;pw&gt;</code></td><td>Lifts the permissions. Also <code>FERROREPORT_PDF_OWNER_PASSWORD</code>; without one, nobody can lift them</td></tr>
         <tr><td><code>--permissions &lt;list&gt;</code></td><td>What readers allow without the owner password: <code>print</code>, <code>copy</code>, <code>modify</code>, <code>annotate</code>, <code>fill</code>, <code>accessibility</code>, <code>assemble</code>, <code>all</code>, separated by commas (default: none). Encrypts the PDF too</td></tr>
         <tr><td><code>--max-pages &lt;n&gt;</code></td><td>Stops if the report goes over this many pages. See <a href="#large">Large reports and limits</a></td></tr>
+        <tr><td><code>--max-rows &lt;n&gt;</code></td><td>Stops if the report reads more than this many rows, its subreports' and datasets' included. See <a href="#large">Large reports and limits</a></td></tr>
         <tr><td><code>--max-row &lt;MB&gt;</code></td><td>Stops at a row of data larger than this. Default 256</td></tr>
         <tr><td><code>--db &lt;url&gt;</code></td><td>Fills the report from its own SQL query, and its subreports from theirs (<code>FERROREPORT_DB</code>; password in <code>FERROREPORT_DB_PASSWORD</code>). See <a href="#database">Rows from a database</a></td></tr>
         <tr><td><code>--timeout &lt;seconds&gt;</code></td><td>Stops if the render takes longer than this</td></tr>
@@ -453,6 +454,7 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>--workers &lt;n&gt;</code></td><td></td><td>Requests rendered in parallel. Default: the number of CPUs</td></tr>
         <tr><td><code>--timeout &lt;seconds&gt;</code></td><td></td><td>Longest a render may take. Default 60; <code>0</code> for no limit</td></tr>
         <tr><td><code>--max-pages &lt;n&gt;</code></td><td></td><td>Most pages a report may have. Default: no limit</td></tr>
+        <tr><td><code>--max-rows &lt;n&gt;</code></td><td></td><td>Most rows a report may read, its subreports' and datasets' included. Default: no limit</td></tr>
         <tr><td><code>--cache &lt;n&gt;</code></td><td></td><td>Parsed templates kept in memory, so a template sent again is not parsed again. Default 128; <code>0</code> for none</td></tr>
         <tr><td><code>--access-log</code></td><td></td><td>Prints a line per request: method, path, status and time</td></tr>
         <tr><td><code>--spool-memory &lt;MB&gt;</code></td><td><code>FERROREPORT_SPOOL_MEMORY</code></td><td>How much of one document is kept in memory until it is complete; the rest goes to a file. Default 32</td></tr>
@@ -543,8 +545,8 @@ curl -X POST localhost:8080/render/sales -H 'Authorization: Bearer change-me' \
 psql -At -c "select row_to_json(s) from sales s" | { echo '{"params": {"YEAR": 2026}}'; cat; } | \
   curl -X POST localhost:8080/render/sales -H 'Authorization: Bearer change-me' \
     -H 'Content-Type: application/x-ndjson' -T - -o sales.pdf</pre>
-      <p>The first line may be as large as <code>--max-body</code>; the rows have no limit of their own (<code>--timeout</code> and
-        <code>--max-pages</code> are what stop a report that is too large).</p>
+      <p>The first line may be as large as <code>--max-body</code>; the rows have no limit of their own (<code>--timeout</code>,
+        <code>--max-pages</code> and <code>--max-rows</code> are what stop a report that is too large).</p>
       <p><b>The document as it renders.</b> By default the server keeps the document until it is complete (in memory up to
         <code>--spool-memory</code>, then in a file), so that an error is always an error and never half a PDF. Add
         <code>Prefer: respond-streaming</code> and the document is sent while it renders instead: the first bytes arrive in a fraction of
@@ -599,7 +601,8 @@ writeFileSync("invoice.xlsx", render(template, rows, params, { format: "xlsx" })
       </table>
       <p><code>options</code> holds <code>locale</code>, <code>now</code>, <code>resources</code> (as above) and <code>format</code>:
         <code>"pdf"</code> (default), <code>"xlsx"</code>, <code>"docx"</code>, <code>"pptx"</code>, <code>"ods"</code>, <code>"odt"</code>, <code>"html"</code> or <code>"csv"</code> (UTF-8 bytes). Also <code>maxPages</code> (stop a
-        report that grows past that many pages), <code>csvSafe</code> (guard CSV against spreadsheet formulas in the data) and
+        report that grows past that many pages), <code>maxRows</code> (stop one that reads more than that many rows),
+        <code>csvSafe</code> (guard CSV against spreadsheet formulas in the data) and
         <code>xlsxNumbers</code> (numbers as numbers in Excel and ODS). For PDF: <code>tagged</code>, <code>pdfa</code> (<code>"3b"</code>...),
         <code>attachments</code> (<code>[{ name, data, mime }]</code>), and <code>password</code>, <code>ownerPassword</code> and
         <code>permissions</code> to encrypt it (see <a href="#pdf">PDF/A, attachments, encryption</a>).</p>
@@ -637,7 +640,7 @@ stats = ferroreport.render_to_file("sales.jrxml", "sales.pdf", data_file="sales.
 print(stats)                               # {"pages": 23810, "rows": 1000000}</pre>
       <table>
         <tr><th>Function</th><th>Does</th></tr>
-        <tr><td class="long"><code>render(template, data=None, params=None, *, locale, resources, resource_dirs, now, format, max_pages, timeout, csv_safe, xlsx_numbers, tagged, pdfa, attachments, password, owner_password, permissions)</code></td><td>Returns the file as <code>bytes</code>: PDF by default, Excel with <code>format="xlsx"</code>, Word with <code>format="docx"</code>, PowerPoint with <code>format="pptx"</code>, OpenDocument with <code>format="ods"</code> or <code>format="odt"</code>, CSV with <code>format="csv"</code>, HTML with <code>format="html"</code>. <code>max_pages</code> and <code>timeout</code> (seconds) stop a report that grows past what you expect; <code>pdfa</code>, <code>attachments</code> and the passwords and <code>permissions</code> are described in <a href="#pdf">PDF/A, attachments, encryption</a></td></tr>
+        <tr><td class="long"><code>render(template, data=None, params=None, *, locale, resources, resource_dirs, now, format, max_pages, max_rows, timeout, csv_safe, xlsx_numbers, tagged, pdfa, attachments, password, owner_password, permissions)</code></td><td>Returns the file as <code>bytes</code>: PDF by default, Excel with <code>format="xlsx"</code>, Word with <code>format="docx"</code>, PowerPoint with <code>format="pptx"</code>, OpenDocument with <code>format="ods"</code> or <code>format="odt"</code>, CSV with <code>format="csv"</code>, HTML with <code>format="html"</code>. <code>max_pages</code>, <code>max_rows</code> and <code>timeout</code> (seconds) stop a report that grows past what you expect; <code>pdfa</code>, <code>attachments</code> and the passwords and <code>permissions</code> are described in <a href="#pdf">PDF/A, attachments, encryption</a></td></tr>
         <tr><td class="long"><code>render_to_file(template, output, data=None, params=None, *, data_file, ...)</code></td><td>Same arguments; writes the file to <code>output</code> as it is made and returns <code>{"pages", "rows"}</code>. Without <code>format</code>, the extension (<code>.pdf</code>, <code>.xlsx</code>, <code>.docx</code>, <code>.pptx</code>, <code>.ods</code>, <code>.odt</code>, <code>.csv</code>, <code>.html</code>) decides. <code>data_file</code> is a file of rows (a JSON array or one object per line) read as the report needs it, instead of <code>data</code></td></tr>
         <tr><td><code>inspect(template)</code></td><td>Returns a dict with <code>name</code>, <code>parameters</code>, <code>fields</code> and <code>warnings</code></td></tr>
         <tr><td><code>convert(template, to="ferro")</code></td><td>Returns the template rewritten, as <code>.ferro</code> or (<code>to="jrxml"</code>) JRXML 7. See <a href="#ferro">Templates in .ferro</a></td></tr>
@@ -693,7 +696,7 @@ StreamingOutput body = out -&gt; reports.template(Path.of("reports/invoice.jrxml
         <tr><td class="long"><code>.template(Path)</code>, <code>.source(String)</code>, <code>.named(String)</code></td><td>A report from a file, from JRXML text, or by the name a server knows it by</td></tr>
         <tr><td><code>.rows(Iterable)</code>, <code>.rows(ResultSet)</code></td><td>The rows, read one at a time: Maps of field name to value (nested Maps and Lists feed subreports and tables), or the columns of a query</td></tr>
         <tr><td class="long"><code>.param</code>, <code>.params</code>, <code>.locale</code>, <code>.now</code>, <code>.format</code>, <code>.resources</code></td><td>Parameters, formatting locale, the value of <code>new Date()</code>, output format, extra folders for images and subreports</td></tr>
-        <tr><td class="long"><code>.maxPages(n)</code>, <code>.timeout(Duration)</code>, <code>.csvSafe(true)</code>, <code>.xlsxNumbers(true)</code>, <code>.tagged(true)</code>, <code>.pdfa("3b")</code>, <code>.attach(Path)</code>, <code>.password(user, owner)</code>, <code>.permissions("print", ...)</code></td><td>Limits and export options, as on the command line (the local engine gets the passwords through its environment, never its command line; attachments need the local engine)</td></tr>
+        <tr><td class="long"><code>.maxPages(n)</code>, <code>.maxRows(n)</code>, <code>.timeout(Duration)</code>, <code>.csvSafe(true)</code>, <code>.xlsxNumbers(true)</code>, <code>.tagged(true)</code>, <code>.pdfa("3b")</code>, <code>.attach(Path)</code>, <code>.password(user, owner)</code>, <code>.permissions("print", ...)</code></td><td>Limits and export options, as on the command line (the local engine gets the passwords through its environment, never its command line; attachments need the local engine)</td></tr>
         <tr><td class="long"><code>.render()</code>, <code>.renderTo(Path)</code>, <code>.renderTo(OutputStream)</code></td><td>The document as bytes, as a file written page by page (nothing is left if it fails), or into a stream as it is made</td></tr>
         <tr><td><code>FerroreportException</code></td><td>Thrown with the engine's message when a report cannot be rendered</td></tr>
       </table>
@@ -729,6 +732,7 @@ std::fs::write("invoice.pdf", pdf)?;</pre>
         <tr><td class="long"><code>render_to(&amp;report, rows, params, format, writer)</code></td><td>Renders rows that arrive one at a time (any iterator of records; <code>JsonRows</code> reads them from JSON text) to any <code>std::io::Write</code>, page by page. Returns the number of pages and rows. See <a href="#large">Large reports and limits</a></td></tr>
         <tr><td class="long"><code>fill_to(&amp;report, rows, params, &amp;mut sink)</code></td><td>Hands each finished page to a <code>PageSink</code> of your own</td></tr>
         <tr><td><code>.limits(Limits { max_pages, timeout })</code></td><td>Stops a render that goes over, with <code>Error::Limit</code></td></tr>
+        <tr><td><code>.max_rows(Some(n))</code></td><td>Stops a render that reads more than <code>n</code> rows, its subreports' and datasets' included, with <code>Error::Limit</code></td></tr>
         <tr><td><code>.csv_options(...)</code>, <code>.xlsx_options(...)</code></td><td>Options the <code>render</code> methods use for CSV, and for Excel and ODS</td></tr>
         <tr><td class="long"><code>to_xlsx(doc, &amp;XlsxOptions)</code>, <code>to_ods(doc, &amp;XlsxOptions)</code>, <code>to_csv(doc, &amp;CsvOptions)</code>, <code>export(doc, format)</code></td><td>Export a filled document to Excel, ODS or CSV (<code>export</code> to any format). <code>XlsxOptions { detect_cell_type }</code> writes numbers as numbers; <code>CsvOptions</code> sets the field and record delimiters</td></tr>
         <tr><td><code>font_substitutions()</code></td><td>Font families the last renders had to replace</td></tr>
@@ -990,12 +994,16 @@ ferroreport render invoice.jrxml -d rows.json -o invoice.pdf --sign-key key.pem 
         <li><b>A crosstab over the report's own rows</b> needs them all, so those rows are kept until the crosstab prints. Crosstabs,
           tables, lists and subreports over nested data are not affected.</li>
       </ul>
-      <p>Two limits stop a report that grows past what you expect. Set them whenever templates or data come from other people:</p>
+      <p>Three limits stop a report that grows past what you expect. Set them whenever templates or data come from other people:</p>
       <table>
         <tr><th>Limit</th><th>Command line and server</th><th>Python</th><th>Rust</th><th>JavaScript</th></tr>
         <tr><td>Pages</td><td><code>--max-pages</code></td><td><code>max_pages=</code></td><td><code>Limits::max_pages</code></td><td><code>maxPages</code></td></tr>
+        <tr><td>Rows read</td><td><code>--max-rows</code></td><td><code>max_rows=</code></td><td><code>Renderer::max_rows</code></td><td><code>maxRows</code></td></tr>
         <tr><td>Time</td><td><code>--timeout</code> (60 s by default in <code>serve</code>)</td><td><code>timeout=</code></td><td><code>Limits::timeout</code></td><td>not available: there is no clock to check in WebAssembly</td></tr>
       </table>
+      <p>The row limit counts every row the render reads: the report's own and those of its subreports, tables, lists, charts
+        and crosstabs, each once. It stops a report that reads many rows but prints few pages (a summary of totals, a chart over a
+        large data set), which the page limit does not, at the first row past it.</p>
       <p>A render that goes over stops with an error (<code>413</code> from the server) and leaves no file behind.</p>
 
       <h2 id="database">Rows from a database</h2>

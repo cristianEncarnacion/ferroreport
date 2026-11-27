@@ -47,6 +47,8 @@ RENDER OPTIONS:
         --tagged                In PDF, say what the content is (tagged PDF) for screen readers:
                                 texts as paragraphs, images as figures, the rest as decoration
         --max-pages <n>         Stop if the report goes over this many pages
+        --max-rows <n>          Stop if the report reads more than this many rows (the rows
+                                of its subreports, tables, lists, charts and crosstabs too)
         --timeout <seconds>     Stop if the render takes longer than this
         --max-row <MB>          Stop at a row of data larger than this (default: 256)
     -w, --watch                 Render again whenever the template, its folder, the rows or the
@@ -146,6 +148,8 @@ PowerPoint, OpenDocument, CSV or a web preview):
         --workers <n>           Requests rendered in parallel (default: CPU count)
         --timeout <seconds>     Longest a render may take (default: 60; 0 for no limit)
         --max-pages <n>         Most pages a report may have (default: no limit)
+        --max-rows <n>          Most rows a report may read, its subreports' and datasets'
+                                included (default: no limit)
         --cache <n>             Parsed templates kept in memory (default: 128; 0 for none)
         --access-log            Print a line per request
     GET /health answers without a token; GET /metrics gives counters for Prometheus.
@@ -984,6 +988,7 @@ fn render(args: &[String]) -> CliResult {
     let mut permissions: Option<String> = None;
     let mut attachments = Vec::new();
     let mut limits = ferroreport::Limits::default();
+    let mut max_rows = None;
     let mut db = std::env::var("FERROREPORT_DB").ok().filter(|u| !u.is_empty());
     let mut sign = SignOptions::default();
     let mut it = args.iter();
@@ -1013,6 +1018,7 @@ fn render(args: &[String]) -> CliResult {
                 max_row = (mb.max(0.001) * 1048576.0) as usize;
             }
             "--max-pages" => limits.max_pages = Some(value(a)?.parse().map_err(|_| "--max-pages expects a number")?),
+            "--max-rows" => max_rows = Some(value(a)?.parse().map_err(|_| "--max-rows expects a number")?),
             "--timeout" => {
                 let secs: f64 = value(a)?.parse().map_err(|_| "--timeout expects seconds")?;
                 limits.timeout = Some(std::time::Duration::from_secs_f64(secs.max(0.0)));
@@ -1053,6 +1059,7 @@ fn render(args: &[String]) -> CliResult {
         .locale(&locale)
         .resource_dir(template_dir)
         .limits(limits)
+        .max_rows(max_rows)
         .xlsx_options(ferroreport::xlsx::XlsxOptions { detect_cell_type: xlsx_numbers })
         .tagged(tagged)
         .pdfa(pdfa)
@@ -1220,7 +1227,7 @@ fn watch(args: &[String]) -> CliResult {
         match a.as_str() {
             "-d" | "--data" | "-p" | "--params" | "-r" | "--resources" => watched.extend(it.next().map(PathBuf::from)),
             "-o" | "--output" | "-f" | "--format" | "-l" | "--locale" | "--font" | "--font-set" | "--now" | "--db" | "--pdfa"
-            | "--attach" | "--max-row" | "--max-pages" | "--timeout" | "--user-password" | "--owner-password"
+            | "--attach" | "--max-row" | "--max-pages" | "--max-rows" | "--timeout" | "--user-password" | "--owner-password"
             | "--permissions" => {
                 it.next();
             }
@@ -1341,6 +1348,7 @@ fn serve(args: &[String]) -> CliResult {
     let mut workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
     // A request that runs for a minute is almost always a mistake or an attack.
     let mut limits = ferroreport::Limits { max_pages: None, timeout: Some(std::time::Duration::from_secs(60)) };
+    let mut max_rows = None;
     let mut cache = 128usize;
     let mut access_log = false;
     let mut allow_anonymous = std::env::var("FERROREPORT_ALLOW_ANONYMOUS").is_ok_and(|v| !v.is_empty() && v != "0");
@@ -1366,6 +1374,7 @@ fn serve(args: &[String]) -> CliResult {
             "--max-body" => max_body_mb = value(a)?.parse().map_err(|_| "--max-body expects megabytes")?,
             "--workers" => workers = value(a)?.parse().map_err(|_| "--workers expects a number")?,
             "--max-pages" => limits.max_pages = Some(value(a)?.parse().map_err(|_| "--max-pages expects a number")?),
+            "--max-rows" => max_rows = Some(value(a)?.parse().map_err(|_| "--max-rows expects a number")?),
             "--timeout" => {
                 let secs: f64 = value(a)?.parse().map_err(|_| "--timeout expects seconds (0 for none)")?;
                 limits.timeout = (secs > 0.0).then(|| std::time::Duration::from_secs_f64(secs));
@@ -1389,6 +1398,7 @@ fn serve(args: &[String]) -> CliResult {
         max_body: max_body_mb * 1024 * 1024,
         workers,
         limits,
+        max_rows,
         cache,
         access_log,
         allow_anonymous,

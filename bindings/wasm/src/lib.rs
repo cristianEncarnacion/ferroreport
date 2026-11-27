@@ -53,7 +53,8 @@ fn resources(options: &JsValue) -> Vec<(String, Vec<u8>)> {
 /// - `data`: rows (an array of objects) or JSON text.
 /// - `params`: report parameters (an object) or JSON text.
 /// - `options`: `{ locale?: string, now?: string | Date, resources?: { [path]: Uint8Array | string },
-///   format?: "pdf" | "xlsx" | "docx" | "pptx" | "ods" | "odt" | "csv" | "html", maxPages?: number, csvSafe?: boolean, xlsxNumbers?: boolean,
+///   format?: "pdf" | "xlsx" | "docx" | "pptx" | "ods" | "odt" | "csv" | "html", maxPages?: number, maxRows?: number, csvSafe?: boolean,
+///   xlsxNumbers?: boolean,
 ///   tagged?: boolean, pdfa?: "2b" | "2u" | "2a" | "3b" | "3u" | "3a",
 ///   attachments?: { name: string, data: Uint8Array | string, mime?: string }[],
 ///   password?: string, ownerPassword?: string, permissions?: string | string[] }`
@@ -61,9 +62,10 @@ fn resources(options: &JsValue) -> Vec<(String, Vec<u8>)> {
 ///   `attachments` are files carried inside the PDF, which PDF/A-3 allows; `password`,
 ///   `ownerPassword` and `permissions` — "print", "copy", "modify", "annotate", "fill",
 ///   "accessibility", "assemble", "all" — encrypt the PDF with AES-256).
-///   `maxPages` stops a report that grows past that many pages; `csvSafe` puts an apostrophe
-///   before CSV values a spreadsheet would run as a formula; `xlsxNumbers` writes numbers as
-///   numbers in Excel and ODS instead of formatted text.
+///   `maxPages` stops a report that grows past that many pages, and `maxRows` one that reads
+///   more than that many rows (those of its subreports and datasets too); `csvSafe` puts an
+///   apostrophe before CSV values a spreadsheet would run as a formula; `xlsxNumbers` writes
+///   numbers as numbers in Excel and ODS instead of formatted text.
 #[wasm_bindgen]
 pub fn render(template: &str, data: JsValue, params: JsValue, options: JsValue) -> Result<Vec<u8>, JsError> {
     let rows = to_json(&data, serde_json::Value::Array(Vec::new()))?;
@@ -74,6 +76,7 @@ pub fn render(template: &str, data: JsValue, params: JsValue, options: JsValue) 
     let mut r = ferroreport::Renderer::new()
         .locale(&locale)
         .limits(limits)
+        .max_rows(get(&options, "maxRows").as_f64().map(|n| n.max(0.0) as usize))
         .xlsx_options(ferroreport::xlsx::XlsxOptions { detect_cell_type: get(&options, "xlsxNumbers").is_truthy() })
         .tagged(get(&options, "tagged").is_truthy())
         .csv_options(ferroreport::csv::CsvOptions { guard_formulas: get(&options, "csvSafe").is_truthy(), ..Default::default() });

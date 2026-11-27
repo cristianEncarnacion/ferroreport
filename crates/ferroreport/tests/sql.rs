@@ -89,6 +89,53 @@ fn fills_reports_and_subreports_from_their_queries() {
     assert_eq!(asked.len(), 3);
 }
 
+/// Departments as `Fake` gives them, and a query for their people that never ends.
+struct Endless {
+    pulled: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Connection for Endless {
+    fn query<'a>(&'a self, sql: &str, params: &[SqlValue]) -> ferroreport::Result<SqlRows<'a>> {
+        if sql.contains("FROM department") {
+            let rows: Vec<ferroreport::Result<_>> = Fake { asked: Mutex::new(Vec::new()) }.query(sql, params)?.collect();
+            return Ok(Box::new(rows.into_iter()));
+        }
+        let pulled = self.pulled.clone();
+        Ok(Box::new(std::iter::repeat_with(move || {
+            pulled.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(vec![("employee".into(), "Persona".into()), ("salary".into(), "1".into())])
+        })))
+    }
+
+    fn placeholder(&self, n: usize) -> String {
+        format!("${n}")
+    }
+}
+
+#[test]
+fn the_row_limit_counts_the_rows_of_subreport_queries() {
+    // 2 departments, with 2 and 3 people: 7 rows.
+    let render = |max: usize| {
+        let mut renderer = Renderer::new().connection(Some(Arc::new(Fake { asked: Mutex::new(Vec::new()) }))).max_rows(Some(max));
+        renderer.add_resource("people.jrxml", PEOPLE.as_bytes().to_vec());
+        let report = renderer.parse(MAIN).unwrap();
+        renderer.render_query_to(&report, HashMap::new(), Format::Csv, Vec::new())
+    };
+    assert_eq!(render(7).unwrap().rows, 2);
+    let err = render(6).unwrap_err();
+    assert_eq!(err.to_string(), "limit exceeded: the report reads more than 6 rows");
+
+    // A subreport's query is read no further than the limit.
+    let pulled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut renderer = Renderer::new().connection(Some(Arc::new(Endless { pulled: pulled.clone() }))).max_rows(Some(100));
+    renderer.add_resource("people.jrxml", PEOPLE.as_bytes().to_vec());
+    let report = renderer.parse(MAIN).unwrap();
+    let err = renderer.render_query_to(&report, HashMap::new(), Format::Csv, Vec::new()).unwrap_err();
+    assert!(matches!(err, ferroreport::Error::Limit(_)), "{err}");
+    // The first department, then its people up to one past the limit.
+    assert_eq!(pulled.load(std::sync::atomic::Ordering::Relaxed), 100);
+}
+
 #[test]
 fn render_query_to_needs_a_connection_and_a_query() {
     let mut renderer = Renderer::new();

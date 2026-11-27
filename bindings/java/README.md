@@ -86,7 +86,7 @@ byte[] pdf = reports.named("invoice").rows(lines).param("CUSTOMER", "Caribe").re
 | `.param(name, value)`, `.params(Map)` | Report parameters |
 | `.locale("es_DO")`, `.now(LocalDateTime)` | Number and date formatting; the value of `new Date()` in expressions |
 | `.format(Format.PDF \| XLSX \| DOCX \| PPTX \| ODS \| ODT \| CSV \| HTML)` | The output format (`renderTo(Path)` goes by the extension) |
-| `.maxPages(n)`, `.timeout(Duration)` | Stop a report that grows past what you expect (local engine; a server has its own limits) |
+| `.maxPages(n)`, `.maxRows(n)`, `.timeout(Duration)` | Stop a report that grows past what you expect: `maxRows` counts the rows of subreports and datasets too (local engine; a server has its own limits) |
 | `.csvSafe(true)`, `.xlsxNumbers(true)` | Guard CSV against spreadsheet formulas in the data; numbers as numbers in Excel and ODS |
 | `.tagged(true)` | A tagged PDF, for screen readers: texts as paragraphs, pictures as figures |
 | `.resources(Path)` | An extra directory for images and subreports |

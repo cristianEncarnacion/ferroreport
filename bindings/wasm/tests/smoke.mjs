@@ -69,6 +69,12 @@ assert.deepEqual(ferroreport.toTree(template).attrs.find(([k]) => k === "name"),
 assert.throws(() => ferroreport.fromTree({ tag: "html", attrs: [], children: [] }));
 assert.throws(() => ferroreport.fromTree(tree, "pdf"));
 
+// Limits: 9 orders and their 101 lines are 110 rows.
+const limited = { resources: { "lines.jrxml": readFileSync(new URL("lines.jrxml", fx)) }, format: "csv" };
+assert.ok(ferroreport.render(template, data, {}, { ...limited, maxRows: 110 }).length > 0);
+assert.throws(() => ferroreport.render(template, data, {}, { ...limited, maxRows: 109 }), /reads more than 109 rows/);
+assert.throws(() => ferroreport.render(template, data, {}, { ...limited, maxPages: 1 }), /more than 1 pages/);
+
 assert.throws(() => ferroreport.render("<jasperReport", [], {}, {}));
 assert.throws(() => ferroreport.render(template, data, {}, { format: "docx" }));
 console.log(`ok: ${pdf.length} bytes, engine ${ferroreport.version()}`);

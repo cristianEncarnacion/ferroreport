@@ -264,8 +264,9 @@ impl<'a> Rows<'a> {
         Rows { source: RowSource::Slice(records.iter()), seen: Vec::new(), keep_all: needs_all_rows(report), count: 0 }
     }
 
-    /// Moves to the next row; false at the end (the last row stays current).
-    fn advance(&mut self) -> Result<bool> {
+    /// Moves to the next row; false at the end (the last row stays current). Every row read
+    /// counts toward the render's row limit, kept with `images`.
+    fn advance(&mut self, images: &mut ImageStore) -> Result<bool> {
         let next = match &mut self.source {
             RowSource::Slice(it) => it.next().map(|r| Ok(Row::Borrowed(r))),
             RowSource::Stream(it) => it.next().map(|r| r.map(Row::Owned)),
@@ -273,6 +274,7 @@ impl<'a> Rows<'a> {
         match next {
             Some(row) => {
                 let row = row?;
+                count_rows(images, 1)?;
                 if !self.keep_all && self.seen.len() >= 2 {
                     self.seen.remove(0);
                 }
@@ -360,6 +362,23 @@ fn check_time(images: &ImageStore) -> Result<()> {
         }
         _ => Ok(()),
     }
+}
+
+/// Counts `n` rows read toward the render's row limit ([`crate::Renderer::max_rows`]): the
+/// report's own rows and those of its subreports, tables, lists, charts and crosstabs. The
+/// count travels with the image store, as the deadline does.
+fn count_rows(images: &mut ImageStore, n: usize) -> Result<()> {
+    images.rows_read = images.rows_read.saturating_add(n);
+    match images.max_rows {
+        Some(max) if images.rows_read > max => Err(Error::Limit(format!("the report reads more than {max} rows"))),
+        _ => Ok(()),
+    }
+}
+
+/// How many rows a query needs to give to reach the row limit and go one past it: reading
+/// more would only be thrown away.
+fn rows_left(images: &ImageStore) -> Option<usize> {
+    images.max_rows.map(|max| max.saturating_sub(images.rows_read).saturating_add(1))
 }
 
 /// Receives the pages of a report as they are finished, so a long report never has to be
@@ -691,8 +710,7 @@ fn chart_over_run(
     inner.evaluation_group = None;
     crate::chart::copy_settings(ch, &inner);
     let report = crate::table::chart_report(inner, run, w, h);
-    let connection = images.connection.clone();
-    let (params, records) = run_inputs(run, &report, scope, env, "chart", connection.as_ref())?;
+    let (params, records) = run_inputs(run, &report, scope, env, "chart", images)?;
     if images.depth >= MAX_SUBREPORT_DEPTH {
         return Err(Error::Unsupported(format!("chart: nested more than {MAX_SUBREPORT_DEPTH} levels")));
     }
@@ -2589,7 +2607,7 @@ fn run_subreport(le: &mut LayoutEnv, sr: &SubreportElement) -> Result<(Vec<Segme
     let records = match (&sr.data_source, sr.connection, connection, &report.query) {
         (None, true, Some(conn), Some(_)) => {
             let env = EvalEnv { locale: le.env.locale, groovy: report.language == Language::Groovy, now: le.env.now };
-            query_records(&report, &params, &conn, &env)?
+            query_records(&report, &params, &conn, &env, rows_left(le.images))?
         }
         _ => {
             let rows = match &sr.data_source {
@@ -2787,7 +2805,7 @@ fn fill_crosstab(le: &mut LayoutEnv, ct: &CrosstabElement, el: &Element) -> Resu
         }
         let connection = le.images.connection.clone();
         let records = match (&run.data_source, run.connection, connection, &report.query) {
-            (None, true, Some(conn), Some(_)) => query_records(&report, &run_params, &conn, le.env)?,
+            (None, true, Some(conn), Some(_)) => query_records(&report, &run_params, &conn, le.env, rows_left(le.images))?,
             _ => {
                 let rows = match &run.data_source {
                     Some(e) => match eval(e, le.scope, le.env)? {
@@ -2802,6 +2820,8 @@ fn fill_crosstab(le: &mut LayoutEnv, ct: &CrosstabElement, el: &Element) -> Resu
                 crate::data::records_from_json(&report, &rows)?
             }
         };
+        // Read here rather than by a fill of their own: counted here.
+        count_rows(le.images, records.len())?;
         own_records = records.into_iter().map(Row::Owned).collect();
         dataset_fields = report.fields.clone();
     }
@@ -3173,8 +3193,7 @@ fn run_dataset_report(le: &mut LayoutEnv, run: &DatasetRun, report: &Report, wha
     if le.images.depth >= MAX_SUBREPORT_DEPTH {
         return Err(Error::Unsupported(format!("{what}: nested more than {MAX_SUBREPORT_DEPTH} levels")));
     }
-    let connection = le.images.connection.clone();
-    let (params, records) = run_inputs(run, report, le.scope, le.env, what, connection.as_ref())?;
+    let (params, records) = run_inputs(run, report, le.scope, le.env, what, le.images)?;
     let env = EvalEnv { locale: le.env.locale, groovy: report.language == Language::Groovy, now: le.env.now };
     count_run(le, what)?;
     le.images.depth += 1;
@@ -3190,7 +3209,7 @@ fn run_inputs(
     scope: &dyn Scope,
     env: &EvalEnv,
     what: &str,
-    connection: Option<&crate::sql::Shared>,
+    images: &ImageStore,
 ) -> Result<(HashMap<String, Value>, Vec<Record>)> {
     let mut params = HashMap::new();
     if let Some(e) = &run.parameters_map {
@@ -3211,8 +3230,8 @@ fn run_inputs(
     if let Ok(bundle) = scope.param(crate::expr::eval::RESOURCE_BUNDLE) {
         params.entry(crate::expr::eval::RESOURCE_BUNDLE.into()).or_insert(bundle);
     }
-    if let (None, true, Some(conn), Some(_)) = (&run.data_source, run.connection, connection, &report.query) {
-        let records = query_records(report, &params, conn, env)?;
+    if let (None, true, Some(conn), Some(_)) = (&run.data_source, run.connection, &images.connection, &report.query) {
+        let records = query_records(report, &params, conn, env, rows_left(images))?;
         return Ok((params, records));
     }
     let rows = match &run.data_source {
@@ -3284,9 +3303,14 @@ fn query_records(
     params: &HashMap<String, Value>,
     conn: &crate::sql::Shared,
     env: &EvalEnv,
+    rows_left: Option<usize>,
 ) -> Result<Vec<Record>> {
     let params = resolve_params(report, params.clone(), env)?;
-    crate::sql::query_rows(report, &params, conn.0.as_ref())?.collect()
+    let rows = crate::sql::query_rows(report, &params, conn.0.as_ref())?;
+    match rows_left {
+        Some(n) => rows.take(n).collect(),
+        None => rows.collect(),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3617,6 +3641,19 @@ impl<'a> Filler<'a> {
         self.layout_within(band, mode, None, 0.0)
     }
 
+    /// Lays out (with `lay`) a band that may already have been laid out for the same row, to
+    /// see whether it fits or to cut it: the rows its subreports, tables, lists, charts and
+    /// crosstabs read count once toward the row limit, however many times it is laid out.
+    /// `charged` is what this band has counted so far (0 before its first layout).
+    fn once<T>(&mut self, charged: &mut usize, lay: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
+        let base = self.images.rows_read.saturating_sub(*charged);
+        self.images.rows_read = base;
+        let laid = lay(self);
+        *charged = (*charged).max(self.images.rows_read.saturating_sub(base));
+        self.images.rows_read = base.saturating_add(*charged);
+        laid
+    }
+
     /// Lays out a band, cut at `avail` points when given (what does not fit is dropped),
     /// and at least `min_height` tall.
     fn layout_within(&mut self, band: &Band, mode: Values, avail: Option<f32>, min_height: f32) -> Result<Option<BandLayout>> {
@@ -3894,7 +3931,8 @@ impl<'a> Filler<'a> {
     /// margin, goes on on the next pages, which get no page header or footer of their own
     /// (as in JasperReports).
     fn print_title(&mut self, band: &Band) -> Result<()> {
-        let Some(full) = self.layout(band, Values::Committed)? else { return Ok(()) };
+        let mut charged = 0;
+        let Some(full) = self.once(&mut charged, |f| f.layout(band, Values::Committed))? else { return Ok(()) };
         let limit = self.report.page_height - self.report.margins.bottom;
         if self.flow.is_some() || full.height <= limit - self.offset_y + 1e-3 {
             let (y, h) = (self.offset_y, full.height);
@@ -3907,12 +3945,12 @@ impl<'a> Filler<'a> {
         let mut first = Some(full);
         loop {
             let space = limit - self.offset_y;
-            let part = self.layout_elems(&elements, design_h, Values::Committed, Some(space))?;
+            let part = self.once(&mut charged, |f| f.layout_elems(&elements, design_h, Values::Committed, Some(space)))?;
             if part.items.is_empty() {
                 // Nothing fits even on a new page: print it whole rather than loop forever.
                 let whole = match first.take() {
                     Some(l) => l,
-                    None => self.layout_elems(&elements, design_h, Values::Committed, None)?,
+                    None => self.once(&mut charged, |f| f.layout_elems(&elements, design_h, Values::Committed, None))?,
                 };
                 let (y, h) = (self.offset_y, whole.height);
                 self.emit(whole, y);
@@ -4142,7 +4180,8 @@ impl<'a> Filler<'a> {
     }
 
     fn print_body_band_in_column(&mut self, band: &Band, mode: Values) -> Result<()> {
-        let Some(first) = self.layout(band, mode)? else { return Ok(()) };
+        let mut charged = 0;
+        let Some(first) = self.once(&mut charged, |f| f.layout(band, mode))? else { return Ok(()) };
         let footer_mode = if mode == Values::Estimated { Values::Committed } else { mode };
         let mut elements: Vec<Element> = band.elements.clone();
         let mut design_h = band.height;
@@ -4150,7 +4189,7 @@ impl<'a> Filler<'a> {
         loop {
             let full = match layout.take() {
                 Some(l) => l,
-                None => self.layout_elems(&elements, design_h, mode, None)?,
+                None => self.once(&mut charged, |f| f.layout_elems(&elements, design_h, mode, None))?,
             };
             let space = self.body_limit() - self.offset_y;
             if full.height <= space + 1e-3 {
@@ -4180,7 +4219,7 @@ impl<'a> Filler<'a> {
                 self.in_column = true;
                 continue;
             }
-            let part = self.layout_elems(&elements, design_h, mode, Some(space))?;
+            let part = self.once(&mut charged, |f| f.layout_elems(&elements, design_h, mode, Some(space)))?;
             let rest = part.rest.clone().unwrap_or_default();
             let keep_top = part.rest_reprints;
             if part.items.is_empty() && !self.page_has_content {
@@ -4425,7 +4464,7 @@ impl<'a> Filler<'a> {
 
     fn run(&mut self) -> Result<()> {
         let r = self.report;
-        let no_data = !self.rows.advance()?;
+        let no_data = !self.rows.advance(self.images)?;
         if no_data {
             match r.when_no_data {
                 WhenNoData::NoPages => return Ok(()),
@@ -4491,7 +4530,7 @@ impl<'a> Filler<'a> {
             if idx % 256 == 0 {
                 check_time(self.images)?;
             }
-            more = self.rows.advance()?;
+            more = self.rows.advance(self.images)?;
         }
 
         // End of data: closing group footers see the last record.
@@ -4513,7 +4552,8 @@ impl<'a> Filler<'a> {
         match &r.summary {
             None => self.page_footers(true, Values::Committed)?,
             Some(summary) => {
-                let layout = self.layout(summary, Values::Committed)?;
+                let mut charged = 0;
+                let layout = self.once(&mut charged, |f| f.layout(summary, Values::Committed))?;
                 let h = layout.as_ref().map(|l| l.height).unwrap_or(0.0);
                 // A summary with splitType="Immediate" starts on this page when its first
                 // element fits (JasperReports' break height), and goes on over the next pages.
@@ -4525,7 +4565,7 @@ impl<'a> Filler<'a> {
                     && self.offset_y + h > self.body_limit() + 1e-3
                     && self.offset_y + break_height <= self.body_limit() + 1e-3;
                 if splits_here {
-                    self.split_summary(summary)?;
+                    self.split_summary(summary, &mut charged)?;
                 } else if r.summary_new_page || self.column > 0 || self.offset_y + h > self.body_limit() + 1e-3 {
                     self.page_footers(false, Values::Committed)?;
                     self.new_page()?;
@@ -4534,7 +4574,7 @@ impl<'a> Filler<'a> {
                     } else {
                         self.footers_done = true;
                     }
-                    if let Some(l) = self.layout(summary, Values::Committed)? {
+                    if let Some(l) = self.once(&mut charged, |f| f.layout(summary, Values::Committed))? {
                         let y = self.offset_y;
                         let h = l.height;
                         self.emit(l, y);
@@ -4560,7 +4600,7 @@ impl<'a> Filler<'a> {
     /// JasperReports does (`fillSummaryNoLastFooterSamePage`): what fits on this page, which
     /// keeps its page footer, then the rest on new pages, which have the page header and
     /// footer only with `isSummaryWithPageHeaderAndFooter`.
-    fn split_summary(&mut self, summary: &Band) -> Result<()> {
+    fn split_summary(&mut self, summary: &Band, charged: &mut usize) -> Result<()> {
         let r = self.report;
         let mode = Values::Committed;
         let mut elements = summary.elements.clone();
@@ -4575,7 +4615,7 @@ impl<'a> Filler<'a> {
                 r.page_height - r.margins.bottom - pf
             };
             let space = limit - self.offset_y;
-            let full = self.layout_elems(&elements, design_h, mode, None)?;
+            let full = self.once(charged, |f| f.layout_elems(&elements, design_h, mode, None))?;
             if full.height <= space + 1e-3 {
                 let (y, h) = (self.offset_y, full.height);
                 self.emit(full, y);
@@ -4583,7 +4623,7 @@ impl<'a> Filler<'a> {
                 self.page_has_content = true;
                 break;
             }
-            let part = self.layout_elems(&elements, design_h, mode, Some(space))?;
+            let part = self.once(charged, |f| f.layout_elems(&elements, design_h, mode, Some(space)))?;
             let rest = part.rest.clone().unwrap_or_default();
             if part.items.is_empty() && !self.page_has_content {
                 // Nothing fits even on an empty page: print it whole rather than loop forever.
@@ -4629,6 +4669,7 @@ pub fn fill(
     env: &EvalEnv,
 ) -> Result<PrintDocument> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = false;
     images.deadline = None;
@@ -4648,6 +4689,7 @@ pub fn fill_slice(
     limits: Limits,
 ) -> Result<PrintDocument> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = false;
     images.deadline = limits.deadline();
@@ -4668,6 +4710,7 @@ pub fn fill_rows(
     limits: Limits,
 ) -> Result<PrintDocument> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = false;
     images.deadline = limits.deadline();
@@ -4691,6 +4734,7 @@ pub fn fill_to(
     sink: &mut dyn PageSink,
 ) -> Result<FillStats> {
     images.runs = 0;
+    images.rows_read = 0;
     fonts.clear_paragraphs();
     images.skip_cells = !sink.wants_cells();
     images.deadline = limits.deadline();
@@ -4730,10 +4774,14 @@ fn fill_flow_inner(
 ) -> Result<(Vec<Segment>, HashMap<String, Value>)> {
     let mut row_heights = Vec::new();
     if report.horizontal {
+        // The rows are read again below: this pass does not count them.
+        let read = images.rows_read;
         let mut first = new_filler(report, Rows::from_slice(records, report), params.clone(), fonts, images, env)?;
         first.flow = Some(Vec::new());
         first.run()?;
         row_heights = std::mem::take(&mut first.row_heights);
+        drop(first);
+        images.rows_read = read;
     }
     let mut filler = new_filler(report, Rows::from_slice(records, report), params, fonts, images, env)?;
     filler.flow = Some(Vec::new());

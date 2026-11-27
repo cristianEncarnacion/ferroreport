@@ -18,7 +18,7 @@ fn err(e: impl std::fmt::Display) -> PyErr {
 #[pyo3(signature = (template, data_json, params_json, locale, resource_dirs, resources, now=None, format=None,
                     max_pages=None, timeout=None, csv_safe=false, xlsx_numbers=false, data_path=None, output_path=None,
                     tagged=false, pdfa=None, attachments=Vec::new(), password=None, owner_password=None,
-                    permissions=None))]
+                    permissions=None, max_rows=None))]
 #[allow(clippy::too_many_arguments)]
 fn render(
     py: Python<'_>,
@@ -42,6 +42,7 @@ fn render(
     password: Option<String>,
     owner_password: Option<String>,
     permissions: Option<String>,
+    max_rows: Option<usize>,
 ) -> PyResult<(Py<PyBytes>, usize, usize)> {
     let pdfa = match pdfa {
         Some(p) => {
@@ -71,6 +72,7 @@ fn render(
             let mut r = ferroreport::Renderer::new()
                 .locale(&locale)
                 .limits(limits)
+                .max_rows(max_rows)
                 .xlsx_options(ferroreport::xlsx::XlsxOptions { detect_cell_type: xlsx_numbers })
                 .tagged(tagged)
                 .pdfa(pdfa)

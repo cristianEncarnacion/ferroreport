@@ -59,6 +59,9 @@ const url = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
     `"html"` (a web page that looks like the PDF, for previews: UTF-8 text).
   - `options.maxPages`: stop with an error if the report grows past this many pages (set it
     when templates or data come from other people).
+  - `options.maxRows`: stop with an error if the report reads more than this many rows, the
+    rows of its subreports, tables, lists, charts and crosstabs included (a summary over many
+    rows prints one page, which `maxPages` does not stop).
   - `options.csvSafe`: in CSV, put an apostrophe before values a spreadsheet would run as a
     formula. `options.xlsxNumbers`: in Excel and ODS, write numbers as numbers.
 - `inspect(template) => { name, parameters, fields, warnings }`: `warnings` lists what the

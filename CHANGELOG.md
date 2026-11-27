@@ -48,6 +48,12 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   folders, as JasperReports finds them on its class path. The iconlabel sample draws its icons in
   "JasperReports Icons", the icon font of JasperReports' core jar (not of the sample), which
   ferroreport does not have built in; it was drawn without them.
+- A limit on the rows one render reads (#108): `Renderer::max_rows`, `--max-rows` for `render`
+  and `serve` (answered `413` and counted in `ferroreport_render_limited_total`), `max_rows=` in
+  Python, `maxRows` in JavaScript and `.maxRows(n)` in Java. The rows of subreports, tables,
+  lists, charts and crosstabs count toward the same total, so a report that reads many rows but
+  prints few pages (only a summary, one chart over all the rows) stops at the first row past the
+  limit instead of running until the timeout. `Limits` is unchanged.
 - Thermometer charts are drawn as JasperReports 7 draws them (JFreeChart's `ThermometerPlot`):
   the bulb and stem at their fixed size with both outlines, the mercury and its rounded top,
   the range marks where each range starts in green, orange and red, the axis with whole-number

@@ -372,6 +372,7 @@ ferroreport serve [options]</pre>
         <tr><td><code>--owner-password &lt;pw&gt;</code></td><td>Levanta los permisos. También <code>FERROREPORT_PDF_OWNER_PASSWORD</code>; sin ella, nadie puede levantarlos</td></tr>
         <tr><td><code>--permissions &lt;list&gt;</code></td><td>Lo que los lectores permiten sin la contraseña de propietario: <code>print</code>, <code>copy</code>, <code>modify</code>, <code>annotate</code>, <code>fill</code>, <code>accessibility</code>, <code>assemble</code>, <code>all</code>, separados por comas (por defecto: ninguno). También cifra el PDF</td></tr>
         <tr><td><code>--max-pages &lt;n&gt;</code></td><td>Se detiene si el reporte pasa de esa cantidad de páginas. Ver <a href="#large">Reportes grandes y límites</a></td></tr>
+        <tr><td><code>--max-rows &lt;n&gt;</code></td><td>Se detiene si el reporte lee más de esa cantidad de filas, contando las de sus subreportes y datasets. Ver <a href="#large">Reportes grandes y límites</a></td></tr>
         <tr><td><code>--max-row &lt;MB&gt;</code></td><td>Se detiene en una fila de datos más grande que esto. Por defecto 256</td></tr>
         <tr><td><code>--db &lt;url&gt;</code></td><td>Llena el reporte con su propia consulta SQL, y sus subreportes con las suyas (<code>FERROREPORT_DB</code>; la contraseña en <code>FERROREPORT_DB_PASSWORD</code>). Ver <a href="#database">Filas desde una base de datos</a></td></tr>
         <tr><td><code>--timeout &lt;seconds&gt;</code></td><td>Se detiene si la generación tarda más que esto</td></tr>
@@ -454,6 +455,7 @@ compared with JasperReports: 46 the same pages and text, 0 differ, 2 JasperRepor
         <tr><td><code>--workers &lt;n&gt;</code></td><td></td><td>Las peticiones que se generan en paralelo. Por defecto: la cantidad de CPU</td></tr>
         <tr><td><code>--timeout &lt;seconds&gt;</code></td><td></td><td>Lo más que puede tardar una generación. Por defecto 60; <code>0</code> para no tener límite</td></tr>
         <tr><td><code>--max-pages &lt;n&gt;</code></td><td></td><td>Lo más de páginas que puede tener un reporte. Por defecto: sin límite</td></tr>
+        <tr><td><code>--max-rows &lt;n&gt;</code></td><td></td><td>Lo más de filas que puede leer un reporte, contando las de sus subreportes y datasets. Por defecto: sin límite</td></tr>
         <tr><td><code>--cache &lt;n&gt;</code></td><td></td><td>Las plantillas ya interpretadas que se guardan en memoria, para que una plantilla enviada otra vez no se vuelva a interpretar. Por defecto 128; <code>0</code> para ninguna</td></tr>
         <tr><td><code>--access-log</code></td><td></td><td>Imprime una línea por petición: método, ruta, estado y tiempo</td></tr>
         <tr><td><code>--spool-memory &lt;MB&gt;</code></td><td><code>FERROREPORT_SPOOL_MEMORY</code></td><td>Cuánto de un documento se guarda en memoria hasta que está completo; el resto va a un archivo. Por defecto 32</td></tr>
@@ -544,8 +546,8 @@ curl -X POST localhost:8080/render/sales -H 'Authorization: Bearer change-me' \
 psql -At -c "select row_to_json(s) from sales s" | { echo '{"params": {"YEAR": 2026}}'; cat; } | \
   curl -X POST localhost:8080/render/sales -H 'Authorization: Bearer change-me' \
     -H 'Content-Type: application/x-ndjson' -T - -o sales.pdf</pre>
-      <p>La primera línea puede ser tan grande como <code>--max-body</code>; las filas no tienen límite propio (<code>--timeout</code> y
-        <code>--max-pages</code> son los que detienen un reporte demasiado grande).</p>
+      <p>La primera línea puede ser tan grande como <code>--max-body</code>; las filas no tienen límite propio (<code>--timeout</code>,
+        <code>--max-pages</code> y <code>--max-rows</code> son los que detienen un reporte demasiado grande).</p>
       <p><b>El documento mientras se genera.</b> Por defecto el servidor guarda el documento hasta que está completo (en memoria hasta
         <code>--spool-memory</code>, después en un archivo), para que un error sea siempre un error y nunca medio PDF. Agrega
         <code>Prefer: respond-streaming</code> y el documento se envía mientras se genera: los primeros bytes llegan en una fracción de
@@ -600,7 +602,8 @@ writeFileSync("invoice.xlsx", render(template, rows, params, { format: "xlsx" })
       </table>
       <p><code>options</code> lleva <code>locale</code>, <code>now</code>, <code>resources</code> (como arriba) y <code>format</code>:
         <code>"pdf"</code> (por defecto), <code>"xlsx"</code>, <code>"docx"</code>, <code>"pptx"</code>, <code>"ods"</code>, <code>"odt"</code>, <code>"html"</code> o <code>"csv"</code> (bytes UTF-8). También <code>maxPages</code> (detiene un
-        reporte que pasa de esa cantidad de páginas), <code>csvSafe</code> (protege el CSV de fórmulas de hoja de cálculo en los datos) y
+        reporte que pasa de esa cantidad de páginas), <code>maxRows</code> (detiene uno que lee más de esa cantidad de filas),
+        <code>csvSafe</code> (protege el CSV de fórmulas de hoja de cálculo en los datos) y
         <code>xlsxNumbers</code> (números como números en Excel y ODS). Para PDF: <code>tagged</code>, <code>pdfa</code> (<code>"3b"</code>...),
         <code>attachments</code> (<code>[{ name, data, mime }]</code>), y <code>password</code>, <code>ownerPassword</code> y
         <code>permissions</code> para cifrarlo (ver <a href="#pdf">PDF/A, adjuntos, cifrado</a>).</p>
@@ -638,7 +641,7 @@ stats = ferroreport.render_to_file("sales.jrxml", "sales.pdf", data_file="sales.
 print(stats)                               # {"pages": 23810, "rows": 1000000}</pre>
       <table>
         <tr><th>Función</th><th>Qué hace</th></tr>
-        <tr><td class="long"><code>render(template, data=None, params=None, *, locale, resources, resource_dirs, now, format, max_pages, timeout, csv_safe, xlsx_numbers, tagged, pdfa, attachments, password, owner_password, permissions)</code></td><td>Devuelve el archivo como <code>bytes</code>: PDF por defecto, Excel con <code>format="xlsx"</code>, Word con <code>format="docx"</code>, PowerPoint con <code>format="pptx"</code>, OpenDocument con <code>format="ods"</code> o <code>format="odt"</code>, CSV con <code>format="csv"</code>, HTML con <code>format="html"</code>. <code>max_pages</code> y <code>timeout</code> (segundos) detienen un reporte que crece más de lo esperado; <code>pdfa</code>, <code>attachments</code>, las contraseñas y <code>permissions</code> se describen en <a href="#pdf">PDF/A, adjuntos, cifrado</a></td></tr>
+        <tr><td class="long"><code>render(template, data=None, params=None, *, locale, resources, resource_dirs, now, format, max_pages, max_rows, timeout, csv_safe, xlsx_numbers, tagged, pdfa, attachments, password, owner_password, permissions)</code></td><td>Devuelve el archivo como <code>bytes</code>: PDF por defecto, Excel con <code>format="xlsx"</code>, Word con <code>format="docx"</code>, PowerPoint con <code>format="pptx"</code>, OpenDocument con <code>format="ods"</code> o <code>format="odt"</code>, CSV con <code>format="csv"</code>, HTML con <code>format="html"</code>. <code>max_pages</code>, <code>max_rows</code> y <code>timeout</code> (segundos) detienen un reporte que crece más de lo esperado; <code>pdfa</code>, <code>attachments</code>, las contraseñas y <code>permissions</code> se describen en <a href="#pdf">PDF/A, adjuntos, cifrado</a></td></tr>
         <tr><td class="long"><code>render_to_file(template, output, data=None, params=None, *, data_file, ...)</code></td><td>Los mismos argumentos; escribe el archivo en <code>output</code> a medida que se hace y devuelve <code>{"pages", "rows"}</code>. Sin <code>format</code>, decide la extensión (<code>.pdf</code>, <code>.xlsx</code>, <code>.docx</code>, <code>.pptx</code>, <code>.ods</code>, <code>.odt</code>, <code>.csv</code>, <code>.html</code>). <code>data_file</code> es un archivo de filas (un arreglo JSON o un objeto por línea) que se lee a medida que el reporte lo necesita, en vez de <code>data</code></td></tr>
         <tr><td><code>inspect(template)</code></td><td>Devuelve un dict con <code>name</code>, <code>parameters</code>, <code>fields</code> y <code>warnings</code></td></tr>
         <tr><td><code>convert(template, to="ferro")</code></td><td>Devuelve la plantilla reescrita, como <code>.ferro</code> o (<code>to="jrxml"</code>) JRXML 7. Ver <a href="#ferro">Plantillas en .ferro</a></td></tr>
@@ -694,7 +697,7 @@ StreamingOutput body = out -&gt; reports.template(Path.of("reports/invoice.jrxml
         <tr><td class="long"><code>.template(Path)</code>, <code>.source(String)</code>, <code>.named(String)</code></td><td>Un reporte desde un archivo, desde texto JRXML, o por el nombre con que lo conoce un servidor</td></tr>
         <tr><td><code>.rows(Iterable)</code>, <code>.rows(ResultSet)</code></td><td>Las filas, leídas de a una: Maps de nombre de campo a valor (los Maps y Lists anidados alimentan subreportes y tablas), o las columnas de una consulta</td></tr>
         <tr><td class="long"><code>.param</code>, <code>.params</code>, <code>.locale</code>, <code>.now</code>, <code>.format</code>, <code>.resources</code></td><td>Parámetros, locale del formato, el valor de <code>new Date()</code>, formato de salida, más carpetas para imágenes y subreportes</td></tr>
-        <tr><td class="long"><code>.maxPages(n)</code>, <code>.timeout(Duration)</code>, <code>.csvSafe(true)</code>, <code>.xlsxNumbers(true)</code>, <code>.tagged(true)</code>, <code>.pdfa("3b")</code>, <code>.attach(Path)</code>, <code>.password(user, owner)</code>, <code>.permissions("print", ...)</code></td><td>Límites y opciones de exportación, como en la línea de comandos (el motor local recibe las contraseñas por su entorno, nunca por su línea de comandos; los adjuntos necesitan el motor local)</td></tr>
+        <tr><td class="long"><code>.maxPages(n)</code>, <code>.maxRows(n)</code>, <code>.timeout(Duration)</code>, <code>.csvSafe(true)</code>, <code>.xlsxNumbers(true)</code>, <code>.tagged(true)</code>, <code>.pdfa("3b")</code>, <code>.attach(Path)</code>, <code>.password(user, owner)</code>, <code>.permissions("print", ...)</code></td><td>Límites y opciones de exportación, como en la línea de comandos (el motor local recibe las contraseñas por su entorno, nunca por su línea de comandos; los adjuntos necesitan el motor local)</td></tr>
         <tr><td class="long"><code>.render()</code>, <code>.renderTo(Path)</code>, <code>.renderTo(OutputStream)</code></td><td>El documento como bytes, como un archivo escrito página por página (si falla no queda nada), o en un stream a medida que se hace</td></tr>
         <tr><td><code>FerroreportException</code></td><td>Se lanza con el mensaje del motor cuando un reporte no se puede generar</td></tr>
       </table>
@@ -730,6 +733,7 @@ std::fs::write("invoice.pdf", pdf)?;</pre>
         <tr><td class="long"><code>render_to(&amp;report, rows, params, format, writer)</code></td><td>Genera filas que llegan de a una (cualquier iterador de registros; <code>JsonRows</code> las lee de un texto JSON) a cualquier <code>std::io::Write</code>, página por página. Devuelve la cantidad de páginas y de filas. Ver <a href="#large">Reportes grandes y límites</a></td></tr>
         <tr><td class="long"><code>fill_to(&amp;report, rows, params, &amp;mut sink)</code></td><td>Entrega cada página terminada a un <code>PageSink</code> propio</td></tr>
         <tr><td><code>.limits(Limits { max_pages, timeout })</code></td><td>Detiene una generación que se pasa, con <code>Error::Limit</code></td></tr>
+        <tr><td><code>.max_rows(Some(n))</code></td><td>Detiene una generación que lee más de <code>n</code> filas, contando las de sus subreportes y datasets, con <code>Error::Limit</code></td></tr>
         <tr><td><code>.csv_options(...)</code>, <code>.xlsx_options(...)</code></td><td>Las opciones que usan los métodos <code>render</code> para CSV, y para Excel y ODS</td></tr>
         <tr><td class="long"><code>to_xlsx(doc, &amp;XlsxOptions)</code>, <code>to_ods(doc, &amp;XlsxOptions)</code>, <code>to_csv(doc, &amp;CsvOptions)</code>, <code>export(doc, format)</code></td><td>Exportan un documento ya llenado a Excel, ODS o CSV (<code>export</code> a cualquier formato). <code>XlsxOptions { detect_cell_type }</code> escribe los números como números; <code>CsvOptions</code> fija los delimitadores de campo y de registro</td></tr>
         <tr><td><code>font_substitutions()</code></td><td>Las familias de fuentes que las últimas generaciones tuvieron que reemplazar</td></tr>
@@ -991,12 +995,16 @@ ferroreport render invoice.jrxml -d rows.json -o invoice.pdf --sign-key key.pem 
         <li><b>Un crosstab sobre las filas del propio reporte</b> las necesita todas, así que esas filas se guardan hasta que se imprime el crosstab. Los crosstabs,
           tablas, listas y subreportes sobre datos anidados no se ven afectados.</li>
       </ul>
-      <p>Dos límites detienen un reporte que crece más de lo esperado. Ponlos siempre que las plantillas o los datos vengan de otras personas:</p>
+      <p>Tres límites detienen un reporte que crece más de lo esperado. Ponlos siempre que las plantillas o los datos vengan de otras personas:</p>
       <table>
         <tr><th>Límite</th><th>Línea de comandos y servidor</th><th>Python</th><th>Rust</th><th>JavaScript</th></tr>
         <tr><td>Páginas</td><td><code>--max-pages</code></td><td><code>max_pages=</code></td><td><code>Limits::max_pages</code></td><td><code>maxPages</code></td></tr>
+        <tr><td>Filas leídas</td><td><code>--max-rows</code></td><td><code>max_rows=</code></td><td><code>Renderer::max_rows</code></td><td><code>maxRows</code></td></tr>
         <tr><td>Tiempo</td><td><code>--timeout</code> (60 s por defecto en <code>serve</code>)</td><td><code>timeout=</code></td><td><code>Limits::timeout</code></td><td>no disponible: en WebAssembly no hay reloj que consultar</td></tr>
       </table>
+      <p>El límite de filas cuenta cada fila que lee la generación: las del propio reporte y las de sus subreportes, tablas, listas,
+        gráficos y crosstabs, cada una una vez. Detiene en la primera fila de más un reporte que lee muchas filas pero imprime pocas
+        páginas (un resumen de totales, un gráfico sobre muchos datos), que el límite de páginas no detiene.</p>
       <p>Una generación que se pasa se detiene con un error (<code>413</code> desde el servidor) y no deja ningún archivo.</p>
 
       <h2 id="database">Filas desde una base de datos</h2>

@@ -187,7 +187,7 @@ reports.template(Path.of("reports/sales.jrxml"))
           <code>LocalDate</code>, <code>LocalDateTime</code>, <code>java.util.Date</code> and <code>java.sql</code> dates become dates; and
           <code>byte[]</code> becomes an image. <code>REPORT_LOCALE</code> becomes <code>.locale("es_DO")</code>: number and date formats
           follow en_US, Spanish (es, es_ES, es_DO, es_MX, es_AR, es_CO, es_CL, es_PE and the other Spanish-speaking countries), French (fr, fr_FR, fr_BE, fr_CA, fr_CH, fr_LU, fr_MA, fr_SN and the other French regions), Portuguese (pt, pt_BR, pt_PT), Italian (it, it_IT, it_CH) and German (de, de_DE, de_AT, de_CH) for now.</li>
-        <li><code>.maxPages(n)</code> and <code>.timeout(Duration)</code> stop a report that grows past what you expect.</li>
+        <li><code>.maxPages(n)</code>, <code>.maxRows(n)</code> and <code>.timeout(Duration)</code> stop a report that grows past what you expect.</li>
         <li><code>Ferroreport.local()</code> runs the native engine as a child process for each report: the one named by
           <code>-Dferroreport.bin</code> or <code>FERROREPORT_BIN</code>, else <code>ferroreport</code> on the <code>PATH</code>, else a copy
           downloaded once from the GitHub release of the library's version and checked against its SHA-256 list. In a container, copy the

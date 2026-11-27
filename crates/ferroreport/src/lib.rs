@@ -204,6 +204,16 @@ impl Renderer {
         self
     }
 
+    /// Stops a render that reads more than `rows` rows with [`Error::Limit`], as soon as it
+    /// reads one more: a report that reads many rows but prints few pages (a summary of
+    /// totals, a chart over a large data set) stops before it has read them all. Every row
+    /// counts: the report's own and those of its subreports, tables, lists, charts and
+    /// crosstabs. `None` (the default) sets no limit.
+    pub fn max_rows(mut self, rows: Option<usize>) -> Renderer {
+        self.images.max_rows = rows;
+        self
+    }
+
     /// Writes PDFs that say what their content is (tagged PDF), for screen readers and for
     /// software that extracts text: each text element is a paragraph and each image, chart
     /// and barcode a figure, in reading order; lines, borders and backgrounds are marked as
