@@ -21,7 +21,7 @@
 <meta property="og:image" content="https://cristianencarnacion.github.io/ferroreport/img/invoice.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta property="og:title" content="ferroreport: relatórios em PDF, Excel e Word a partir de qualquer linguagem, em milissegundos">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ferroreport", "description": "Motor de relatórios de código aberto em Rust que gera os templates JRXML do JasperReports em PDF, Excel, Word, PowerPoint, OpenDocument, CSV e HTML sem JVM, idênticos pixel a pixel ao JasperReports.", "inLanguage": "pt-BR", "codeRepository": "https://github.com/cristianEncarnacion/ferroreport", "url": "https://cristianencarnacion.github.io/ferroreport/", "programmingLanguage": ["Rust", "JavaScript", "Python", "Java"], "license": "https://opensource.org/licenses/MIT", "version": "1.3.0", "author": {"@type": "Person", "name": "Cristian Encarnación"}, "keywords": "alternativa ao JasperReports, JRXML, motor de relatórios, gerador de PDF, Rust, PDF/A, PDF/UA, fatura, Excel, Word"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ferroreport", "description": "Motor de relatórios de código aberto em Rust que gera os templates JRXML do JasperReports em PDF, Excel, Word, PowerPoint, OpenDocument, CSV e HTML sem JVM, idênticos pixel a pixel ao JasperReports.", "inLanguage": "pt-BR", "codeRepository": "https://github.com/cristianEncarnacion/ferroreport", "url": "https://cristianencarnacion.github.io/ferroreport/", "programmingLanguage": ["Rust", "JavaScript", "Python", "Java"], "license": "https://opensource.org/licenses/MIT", "version": "1.4.0", "author": {"@type": "Person", "name": "Cristian Encarnación"}, "keywords": "alternativa ao JasperReports, JRXML, motor de relatórios, gerador de PDF, Rust, PDF/A, PDF/UA, fatura, Excel, Word"}</script>
 <meta property="og:description" content="Uma fatura em 3 ms, um milhão de linhas em 19 MB. Lê seus templates do JasperReports, sem JVM. Veja a corrida contra o JasperReports.">
 <link rel="preload" href="../fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../site.css">
@@ -495,7 +495,7 @@ ferroreport doctor invoice.jrxml   # o que este template usa, e se é suportado`
 
 curl -X POST localhost:8080/render/invoice -H 'Authorization: Bearer change-me' -H 'Content-Type: application/json' \\
   -d '{"data": [{"item": "Cemento", "amount": 395}], "params": {"CUSTOMER": "Caribe"}}' -o invoice.pdf`,
-  java: `// Maven Central: io.github.cristianencarnacion:ferroreport:1.3.0 (Java 11+, sem dependências)
+  java: `// Maven Central: io.github.cristianencarnacion:ferroreport:1.4.0 (Java 11+, sem dependências)
 
 Ferroreport reports = Ferroreport.local();
 byte[] pdf = reports.template(Path.of("invoice.jrxml")).rows(lines).param("CUSTOMER", "Distribuidora Caribe").render();

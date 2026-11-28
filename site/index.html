@@ -20,7 +20,7 @@
 <meta property="og:image" content="https://cristianencarnacion.github.io/ferroreport/img/invoice.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta property="og:title" content="ferroreport: PDF, Excel and Word reports from any language, in milliseconds">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ferroreport", "description": "Open-source report engine in Rust that renders JasperReports JRXML templates to PDF, Excel, Word, PowerPoint, OpenDocument, CSV and HTML without a JVM, pixel-identical to JasperReports.", "codeRepository": "https://github.com/cristianEncarnacion/ferroreport", "url": "https://cristianencarnacion.github.io/ferroreport/", "programmingLanguage": ["Rust", "JavaScript", "Python", "Java"], "license": "https://opensource.org/licenses/MIT", "version": "1.3.0", "author": {"@type": "Person", "name": "Cristian Encarnación"}, "keywords": "JasperReports alternative, JRXML, report engine, PDF generator, Rust, PDF/A, PDF/UA, invoice, Excel, Word"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ferroreport", "description": "Open-source report engine in Rust that renders JasperReports JRXML templates to PDF, Excel, Word, PowerPoint, OpenDocument, CSV and HTML without a JVM, pixel-identical to JasperReports.", "codeRepository": "https://github.com/cristianEncarnacion/ferroreport", "url": "https://cristianencarnacion.github.io/ferroreport/", "programmingLanguage": ["Rust", "JavaScript", "Python", "Java"], "license": "https://opensource.org/licenses/MIT", "version": "1.4.0", "author": {"@type": "Person", "name": "Cristian Encarnación"}, "keywords": "JasperReports alternative, JRXML, report engine, PDF generator, Rust, PDF/A, PDF/UA, invoice, Excel, Word"}</script>
 <meta property="og:description" content="An invoice in 3 ms, a million rows in 19 MB. Reads your JasperReports templates, no JVM. Watch it race JasperReports.">
 <link rel="preload" href="fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="site.css">
@@ -494,7 +494,7 @@ ferroreport doctor invoice.jrxml   # what this template uses, and whether it is 
 
 curl -X POST localhost:8080/render/invoice -H 'Authorization: Bearer change-me' -H 'Content-Type: application/json' \\
   -d '{"data": [{"item": "Cemento", "amount": 395}], "params": {"CUSTOMER": "Caribe"}}' -o invoice.pdf`,
-  java: `// Maven Central: io.github.cristianencarnacion:ferroreport:1.3.0 (Java 11+, no dependencies)
+  java: `// Maven Central: io.github.cristianencarnacion:ferroreport:1.4.0 (Java 11+, no dependencies)
 
 Ferroreport reports = Ferroreport.local();
 byte[] pdf = reports.template(Path.of("invoice.jrxml")).rows(lines).param("CUSTOMER", "Distribuidora Caribe").render();

@@ -35,17 +35,17 @@ From Maven Central:
 <dependency>
   <groupId>io.github.cristianencarnacion</groupId>
   <artifactId>ferroreport</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 ```
 
 ```kotlin
 // Gradle
-dependencies { implementation("io.github.cristianencarnacion:ferroreport:1.3.0") }
+dependencies { implementation("io.github.cristianencarnacion:ferroreport:1.4.0") }
 ```
 
 Java 11 or newer. The library has no dependencies; JasperReports is not needed. (JitPack builds
-it from this repository's releases too, as `com.github.cristianEncarnacion:ferroreport:v1.3.0`.)
+it from this repository's releases too, as `com.github.cristianEncarnacion:ferroreport:v1.4.0`.)
 Coming from `JasperFillManager`? The
 [migration guide](https://cristianencarnacion.github.io/ferroreport/migrate.html) shows the same
 call with this library, step by step.

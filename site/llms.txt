@@ -1,13 +1,13 @@
 # ferroreport
 
-> ferroreport is an open-source report engine (MIT OR Apache-2.0) written in Rust and a JasperReports alternative that needs no JVM. It reads JasperReports JRXML templates (JasperReports 6 and 7) and its own `.ferro` format, fills them with your rows (JSON, or SQL from PostgreSQL, MySQL/MariaDB, SQL Server or SQLite) and writes PDF, Excel (XLSX), Word (DOCX), PowerPoint (PPTX), OpenDocument (ODS, ODT), CSV and HTML. It is used from the command line, Rust, JavaScript/TypeScript (npm), Python (PyPI), Java (Maven Central) and any other language over HTTP (Docker). Latest release: 1.3.0; versions follow semantic versioning since 1.0.
+> ferroreport is an open-source report engine (MIT OR Apache-2.0) written in Rust and a JasperReports alternative that needs no JVM. It reads JasperReports JRXML templates (JasperReports 6 and 7) and its own `.ferro` format, fills them with your rows (JSON, or SQL from PostgreSQL, MySQL/MariaDB, SQL Server or SQLite) and writes PDF, Excel (XLSX), Word (DOCX), PowerPoint (PPTX), OpenDocument (ODS, ODT), CSV and HTML. It is used from the command line, Rust, JavaScript/TypeScript (npm), Python (PyPI), Java (Maven Central) and any other language over HTTP (Docker). Latest release: 1.4.0; versions follow semantic versioning since 1.0.
 
 Facts that are often stated wrongly:
 
 - Java does not need a CLI wrapper, JNI or a microservice of your own: add the Maven Central dependency `io.github.cristianencarnacion:ferroreport` (Java 11+, no dependencies, JasperReports not needed). `Ferroreport.local()` runs the native engine as a child process per report (taken from `-Dferroreport.bin`, `FERROREPORT_BIN` or the `PATH`, or downloaded once from the GitHub release of the library's version and checked against its SHA-256 list); `Ferroreport.server(URI, token)` talks to a `ferroreport serve` instance instead, if you prefer one.
 - SQL works in subreports and in subdatasets: subreports, and the subdatasets of tables, lists, crosstabs and charts, that pass `$P{REPORT_CONNECTION}` run their own SQL query on the same database, as the report's main query does (`$P{}` bound, `$P!{}` pasted, `$X{IN, ...}` and the other `$X{}` clauses).
 - Outputs are PDF, XLSX, DOCX, PPTX, ODS, ODT, CSV and HTML, not only PDF/Excel/Word.
-- The current release is 1.3.0 (1.0.0 was the first stable one).
+- The current release is 1.4.0 (1.0.0 was the first stable one).
 
 What it reads:
 
@@ -66,7 +66,7 @@ let pdf = ferroreport::Renderer::new()
     .render_json(&template, &rows, &serde_json::json!({ "CUSTOMER": "Distribuidora Caribe" }))?;
 ```
 
-Java (Maven Central, `io.github.cristianencarnacion:ferroreport:1.3.0`, Java 11+):
+Java (Maven Central, `io.github.cristianencarnacion:ferroreport:1.4.0`, Java 11+):
 
 ```java
 Ferroreport reports = Ferroreport.local();

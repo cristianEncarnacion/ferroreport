@@ -21,7 +21,7 @@ mitad del tamaño de un JRXML y accesible por defecto. Frente al propio JasperRe
 [Descargas](https://github.com/cristianEncarnacion/ferroreport/releases) ·
 [Docker](https://github.com/cristianEncarnacion/ferroreport/pkgs/container/ferroreport)
 
-> Estado: **estable desde la 1.0; la última versión es la 1.3.0** ([qué trajo cada versión](CHANGELOG.md)).
+> Estado: **estable desde la 1.0; la última versión es la 1.4.0** ([qué trajo cada versión](CHANGELOG.md)).
 > Las 48 plantillas comparables de la batería de pruebas salen píxel por píxel igual que en JasperReports 6.20, incluyendo bandas divididas entre páginas,
 > imágenes (también SVG), subreportes, tablas, listas, crosstabs, códigos QR, PDF417, Barbecue
 > y de barras, enlaces, texto con formato y varias columnas; los gráficos se dibujan como los
@@ -112,7 +112,7 @@ mitad del tamaño de un JRXML y accesible por defecto. Frente al propio JasperRe
   las páginas, filas y bytes, y el error. Nunca lleva el token, el cuerpo, los valores de los
   parámetros ni las filas, salvo que un mensaje de error puede citar el valor que no se pudo leer.
   [Los campos](https://cristianencarnacion.github.io/ferroreport/es/docs.html#http-log).
-- **Java:** la dependencia `io.github.cristianencarnacion:ferroreport:1.3.0` de Maven Central
+- **Java:** la dependencia `io.github.cristianencarnacion:ferroreport:1.4.0` de Maven Central
   (Java 11 o más nuevo, sin dependencias ni JasperReports) y
   `Ferroreport.local().template(Path.of("factura.jrxml")).rows(lineas).param("CLIENTE", "Caribe").render()`;
   con `.rows(resultSet).renderTo(Path.of("ventas.pdf"))` un query va directo al archivo sin

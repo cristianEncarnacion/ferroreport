@@ -21,7 +21,7 @@ JRXML and accessible by default. Against JasperReports itself it is about **200�
 [Docker](https://github.com/cristianEncarnacion/ferroreport/pkgs/container/ferroreport) ·
 [Leer en español](README.es.md)
 
-> Status: **stable since 1.0; the latest release is 1.3.0** ([what each release brought](CHANGELOG.md)).
+> Status: **stable since 1.0; the latest release is 1.4.0** ([what each release brought](CHANGELOG.md)).
 > All 48 comparable test templates render pixel for pixel like JasperReports 6.20, including band splitting, images (SVG too), subreports, tables, lists,
 > crosstabs, QR, PDF417, Barbecue and other barcodes, links, styled text and multi-column
 > layouts; charts are drawn as JasperReports 7 draws them (21 of its 24 chart samples come out
