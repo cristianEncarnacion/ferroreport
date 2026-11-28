@@ -4,7 +4,20 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
 [semantic versioning](https://semver.org); what that covers is in the README under
 [Stability](README.md#stability).
 
-## Unreleased
+## 1.4.0
+
+Number and date formats for French, Portuguese, Italian, German and every Spanish-speaking
+country Java has, matched to Java 21; blank subreports that lose their line, icon labels laid
+out as JasperReports 7 lays them out, and meters and thermometers drawn as JFreeChart draws
+them; `WEEKNUM` and `WEEKSINYEAR` as JasperReports counts them; `migrate --jasper` comparing
+every page's pixels too, with `--strict-pixels`; `--max-rows`; a JSON access log, request IDs
+and a render-time histogram for the server; a bank statement example, also a fixture, and every
+example rendered in CI. More of JasperReports' own samples come out the same: 77 of the 101 that
+can be compared against 7.1.1 (74 in 1.3) and 43 of 88 against 6.20.6 (41 in 1.3). No sample
+went from the same to different; the one whose share of differing ink grew is the 6.20.6
+chartthemes sample, on its meter page, which JasperReports draws with the sample's chart theme
+(ferroreport does not read chart themes). The Rust API keeps 1.3's shape (`cargo semver-checks`
+against 1.3.0).
 
 - `ferroreport serve --access-log json` (or `FERROREPORT_ACCESS_LOG=json`) prints one JSON
   object per request for log platforms: time, request ID, method, path, status, milliseconds;
