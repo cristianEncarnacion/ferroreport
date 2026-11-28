@@ -5,12 +5,12 @@ the same rows and parameters and compared page by page. Made by `tools/samples.p
 
 | Result | Templates | Meaning |
 |---|---|---|
-| same | 42 | every page is the same picture |
-| differs | 40 | both engines render it, the pictures differ |
+| same | 43 | every page is the same picture |
+| differs | 39 | both engines render it, the pictures differ |
 | not rendered | 6 | ferroreport refuses the template or fails on it |
 | no reference | 52 | JasperReports cannot render it from rows alone (it needs the sample's Java classes, a database connection inside the report, or other files), so there is nothing to compare with |
 
-**42 of the 88 templates that can be compared come out the same.** JasperReports runs with the
+**43 of the 88 templates that can be compared come out the same.** JasperReports runs with the
 Java runtime's logical fonts (SansSerif, Serif, Monospaced) on DejaVu, as on a stock Linux server (`tools/oracle/fonts.conf`):
 text that names no font is laid out with them and written in PDF's built-in Helvetica, Times or Courier, by both engines.
 
@@ -97,8 +97,8 @@ write, which is what `fixtures/` holds (all pixel-identical). Use `ferroreport d
 | `httpdataadapter/reports/JsonHttpDataAdapterReport.jrxml` | no reference |  | needs Java classes that are not at hand (the sample's own, or libraries it adds); ferroreport renders it |
 | `httpdataadapter/reports/XmlHttpDataAdapterReport.jrxml` | no reference |  | its rows come from a xPath query; ferroreport renders it |
 | `hyperlink/reports/HyperlinkReport.jrxml` | same | 3/3 |  |
-| `i18n/reports/I18nReport.jrxml` | differs | 1/1 | worst page differs in 9.1% of its ink |
-| `iconlabel/reports/IconLabelReport.jrxml` | differs | 2/2 | worst page differs in 34.0% of its ink |
+| `i18n/reports/I18nReport.jrxml` | differs | 1/1 | worst page differs in 9.6% of its ink |
+| `iconlabel/reports/IconLabelReport.jrxml` | same | 2/2 |  |
 | `images/reports/ImagesReport.jrxml` | not rendered |  | unsupported feature: image format (only PNG, JPEG, GIF and SVG are supported) |
 | `jasper/reports/FirstJasper.jrxml` | same | 9/9 |  |
 | `java1.5/reports/Java5Report.jrxml` | same | 1/1 |  |

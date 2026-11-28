@@ -20,10 +20,10 @@ Every release of ferroreport, newest first. From 1.0.0 on, versions follow
   CSV text compared, in `target/compat/report.md` with a diff picture of every page that
   changed; `--strict` fails on any change. Pull requests run it against the latest release, for
   the reviewer, without failing.
-- JasperReports' own samples measured again (`docs/samples*.json`, README): 76 of the 101
-  comparable 7.1.1 templates come out the same (74 before) and 42 of the 88 6.20.6 ones (41
-  before); the subreport MasterReport sample is the same in both, and the 7.1.1 thermometer
-  sample too, so 21 of the 24 7.1.1 chart samples are.
+- JasperReports' own samples measured again (`docs/samples*.json`, README): 77 of the 101
+  comparable 7.1.1 templates come out the same (74 in 1.3.0) and 43 of the 88 6.20.6 ones (41
+  in 1.3.0); the subreport MasterReport and iconlabel samples are the same in both, and the
+  7.1.1 thermometer sample too, so 21 of the 24 7.1.1 chart samples are.
 - Speed: Word, Excel, ODS, ODT, PowerPoint, CSV and tagged PDF exports no longer break each plain
   text into lines twice: the text a cell keeps is cut from the lines laid out for drawing (20,000
   rows of 09-large to DOCX: about 6% less time). Output is byte for byte the same.
