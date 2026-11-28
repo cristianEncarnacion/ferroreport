@@ -1,6 +1,6 @@
 {
   "name": "ferroreport",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Report engine and JasperReports alternative for Node.js, Deno, Bun and browsers: reads JasperReports JRXML templates without a JVM and writes PDF, Excel (XLSX), Word (DOCX), PowerPoint (PPTX), OpenDocument (ODS, ODT), CSV and HTML in milliseconds, pixel-identical to JasperReports. Safe with untrusted templates.",
   "license": "MIT OR Apache-2.0",
   "author": "Cristian Encarnacion",

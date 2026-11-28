@@ -21,7 +21,7 @@ JRXML and accessible by default. Against JasperReports itself it is about **200�
 [Docker](https://github.com/cristianEncarnacion/ferroreport/pkgs/container/ferroreport) ·
 [Leer en español](README.es.md)
 
-> Status: **stable since 1.0; the latest release is 1.3.0** ([what each release brought](CHANGELOG.md)).
+> Status: **stable since 1.0; the latest release is 1.4.0** ([what each release brought](CHANGELOG.md)).
 > All 48 comparable test templates render pixel for pixel like JasperReports 6.20, including band splitting, images (SVG too), subreports, tables, lists,
 > crosstabs, QR, PDF417, Barbecue and other barcodes, links, styled text and multi-column
 > layouts; charts are drawn as JasperReports 7 draws them (21 of its 24 chart samples come out
@@ -696,12 +696,12 @@ checked.
 
 | Result | 6.20.6 | 7.1.1 |
 |---|---|---|
-| The same pages | 42 | 76 |
-| Both render it, the pages differ | 40 | 17 |
+| The same pages | 43 | 77 |
+| Both render it, the pages differ | 39 | 16 |
 | ferroreport refuses it or fails on it | 6 | 8 |
 | JasperReports cannot render it from rows and parameters alone (it needs the sample's Java objects, a database connection or other files), so there is nothing to compare | 52 | 70 |
 
-So 42 of the 88 6.20.6 samples that can be compared come out the same, and 76 of the 101 7.1.1
+So 43 of the 88 6.20.6 samples that can be compared come out the same, and 77 of the 101 7.1.1
 ones (JasperReports 6.20.6 runs on Java 17 there, where its Groovy works). [Every 6.20.6 template with its result and the reason](docs/samples.md), and [every
 7.1.1 one](docs/samples-7.1.1.md). Charts are drawn as JasperReports 7.1 draws them: 21 of the
 24 7.1.1 chart samples are the same (not the one with a chart customizer, the meter, whose value
@@ -727,7 +727,8 @@ from was done again (`--wait-idle`).
 The times are higher than the 1.1.0 figures because the machine was slower in this run:
 JasperReports itself took 10 to 30% longer. Built on the same machine and run alternately,
 1.3.0 is within a few percent of 1.1.0 (8% at most), except Word (DOCX) export of 20,000 rows,
-about 17% slower (0.51 s against 0.44 s), and ODS and ODT of 100,000 rows, slower by design since
+about 17% slower (0.51 s against 0.44 s; 1.4.0 fixed it, at 0.38 s against 1.1.0's 0.39 s in
+another alternating run), and ODS and ODT of 100,000 rows, slower by design since
 1.2 in exchange for a fraction of the memory (67 MiB instead of 248, 40 MiB instead of 264). The
 peak memory of the same binary also moves by a few MiB with the state of the page cache: the
 invoice took 15 MiB in that comparison and 18 MiB in the table below.

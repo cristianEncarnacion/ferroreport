@@ -2,7 +2,7 @@
   "name": "ferroreport",
   "displayName": "ferroreport templates (.ferro)",
   "description": "Syntax highlighting, snippets and folding for ferroreport's .ferro report templates (PDF, Excel, Word, PowerPoint, OpenDocument, CSV and HTML reports).",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "cristianencarnacion",
   "license": "MIT OR Apache-2.0",
   "icon": "images/icon.png",

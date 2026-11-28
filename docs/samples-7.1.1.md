@@ -5,12 +5,12 @@ the same rows and parameters and compared page by page. Made by `tools/samples.p
 
 | Result | Templates | Meaning |
 |---|---|---|
-| same | 76 | every page is the same picture |
-| differs | 17 | both engines render it, the pictures differ |
+| same | 77 | every page is the same picture |
+| differs | 16 | both engines render it, the pictures differ |
 | not rendered | 8 | ferroreport refuses the template or fails on it |
 | no reference | 70 | JasperReports cannot render it from rows alone (it needs the sample's Java classes, a database connection inside the report, or other files), so there is nothing to compare with |
 
-**76 of the 101 templates that can be compared come out the same.** JasperReports runs with the
+**77 of the 101 templates that can be compared come out the same.** JasperReports runs with the
 Java runtime's logical fonts (SansSerif, Serif, Monospaced) on DejaVu, as on a stock Linux server (`tools/oracle/fonts.conf`):
 text that names no font is laid out with them and written in PDF's built-in Helvetica, Times or Courier, by both engines.
 
@@ -96,8 +96,8 @@ write, which is what `fixtures/` holds (all pixel-identical). Use `ferroreport d
 | `httpdataadapter/reports/JsonHttpDataAdapterReport.jrxml` | no reference |  | JasperReports fails on it without the sample's own program; ferroreport renders it |
 | `httpdataadapter/reports/XmlHttpDataAdapterReport.jrxml` | no reference |  | its rows come from a xPath query; ferroreport renders it |
 | `hyperlink/reports/HyperlinkReport.jrxml` | same | 3/3 |  |
-| `i18n/reports/I18nReport.jrxml` | differs | 1/1 | worst page differs in 9.4% of its ink |
-| `iconlabel/reports/IconLabelReport.jrxml` | differs | 2/2 | worst page differs in 34.0% of its ink |
+| `i18n/reports/I18nReport.jrxml` | differs | 1/1 | worst page differs in 9.6% of its ink |
+| `iconlabel/reports/IconLabelReport.jrxml` | same | 2/2 |  |
 | `images/reports/ImagesReport.jrxml` | no reference |  | JasperReports fails on it without the sample's own program; ferroreport: unsupported feature: image format (only PNG, JPEG, GIF and SVG are supported) |
 | `images/reports/scale/ClipNarrowShortImagesReport.jrxml` | same | 1/1 |  |
 | `images/reports/scale/ClipNarrowTallImagesReport.jrxml` | same | 1/1 |  |
