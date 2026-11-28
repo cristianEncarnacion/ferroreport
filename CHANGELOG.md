@@ -96,6 +96,9 @@ against 1.3.0).
   exchange for a fraction of the memory (67 and 40 MiB instead of 248 and 264). The peak memory
   of the same binary moves by a few MiB with the state of the page cache (the invoice: 15 MiB in
   that comparison, 18 MiB in the published run).
+- The race GIF at the top of the README shows 1.3's numbers, as the website's race does:
+  JasperReports 2.90 s for one invoice from a cold start, ferroreport 268 in the same time
+  (was 2.63 s and 234). The promo video still shows 1.1's.
 - Build: simplify two boolean expressions, in DataMatrix encoding and JRXML element parsing, that
   Clippy on Rust 1.96 reports. Rendering is unchanged.
 - A subreport or table whose report prints nothing (no rows, `whenNoDataType="NoPages"`)

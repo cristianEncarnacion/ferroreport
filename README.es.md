@@ -14,7 +14,7 @@ reporte. O escribe las plantillas en [su propio formato](#plantillas-jrxml-o-fer
 mitad del tamaño de un JRXML y accesible por defecto. Frente al propio JasperReports es unas **200 veces más rápido arrancando en frío** y
 **de 3 a 5 veces más rápido que una JVM ya caliente** ([los números](#rendimiento)).
 
-<p align="center"><a href="https://cristianencarnacion.github.io/ferroreport/"><img src="docs/race.gif" alt="Carrera: JasperReports genera 1 factura en 2.63 s; ferroreport genera 234 en el mismo tiempo" width="760"></a></p>
+<p align="center"><a href="https://cristianencarnacion.github.io/ferroreport/"><img src="docs/race.gif" alt="Carrera: JasperReports genera 1 factura en 2.90 s; ferroreport genera 268 en el mismo tiempo" width="760"></a></p>
 
 **[Pruébalo en tu navegador](https://cristianencarnacion.github.io/ferroreport/)** ·
 [Diseña un reporte](https://cristianencarnacion.github.io/ferroreport/designer/) ·
