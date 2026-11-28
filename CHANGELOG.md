@@ -39,7 +39,9 @@ against 1.3.0).
   7.1.1 thermometer sample too, so 21 of the 24 7.1.1 chart samples are.
 - Speed: Word, Excel, ODS, ODT, PowerPoint, CSV and tagged PDF exports no longer break each plain
   text into lines twice: the text a cell keeps is cut from the lines laid out for drawing (20,000
-  rows of 09-large to DOCX: about 6% less time). Output is byte for byte the same.
+  rows of 09-large to DOCX: about 6% less time). Output is byte for byte the same. Measured
+  alternately with 1.1.0 on Linux, that export now takes 0.38 s against 1.1.0's 0.39 s, so the
+  slowdown seen in 1.3.0 (#78) is gone.
 - The French regions whose formats differ from France's in Java 21.0.13 have their own locale:
   `fr_LU` and `fr_MA` group digits with a point (`fr_MA` also has `MAD`, `jui.` for June and
   a.m./p.m.), the CFA franc countries print `F CFA` (fr_SN, fr_CI, fr_BF, fr_BJ, fr_NE, fr_TG,

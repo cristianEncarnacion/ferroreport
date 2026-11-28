@@ -727,7 +727,8 @@ from was done again (`--wait-idle`).
 The times are higher than the 1.1.0 figures because the machine was slower in this run:
 JasperReports itself took 10 to 30% longer. Built on the same machine and run alternately,
 1.3.0 is within a few percent of 1.1.0 (8% at most), except Word (DOCX) export of 20,000 rows,
-about 17% slower (0.51 s against 0.44 s), and ODS and ODT of 100,000 rows, slower by design since
+about 17% slower (0.51 s against 0.44 s; 1.4.0 fixed it, at 0.38 s against 1.1.0's 0.39 s in
+another alternating run), and ODS and ODT of 100,000 rows, slower by design since
 1.2 in exchange for a fraction of the memory (67 MiB instead of 248, 40 MiB instead of 264). The
 peak memory of the same binary also moves by a few MiB with the state of the page cache: the
 invoice took 15 MiB in that comparison and 18 MiB in the table below.
